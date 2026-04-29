@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https: 'unsafe-inline' 'unsafe-eval' data: blob: wss: ws:">
+<title>J.A.R.V.I.S</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: 'SF Mono', 'Courier New', monospace;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#hud-container {
+  width: 100%; height: 100%;
+  background: rgba(2, 8, 20, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Side accent bars */
+#hud-container::before,
+#hud-container::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  z-index: 100;
+  pointer-events: none;
+}
+#hud-container::before {
+  left: 0;
+  background: linear-gradient(to bottom, transparent, #00d4ff 30%, #00d4ff 70%, transparent);
+}
+#hud-container::after {
+  right: 0;
+  background: linear-gradient(to bottom, transparent, #00d4ff 30%, #00d4ff 70%, transparent);
+}
+
+/* ── Camera fills entire window ── */
+#camera-video {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  opacity: 0.08;
+}
+
+/* ── Hands/cat's cradle canvas fills entire window ── */
+#hands-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  z-index: 2;
+}
+
+/* ── Top status bar (overlay) ── */
+#status-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 18px;
+  background: rgba(2, 8, 20, 0.82);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.22);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  z-index: 20;
+  -webkit-app-region: drag;
+}
+
+#logo {
+  color: #00d4ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-shadow: 0 0 12px #00d4ff;
+  -webkit-app-region: no-drag;
+}
+
+#clock {
+  color: rgba(0, 212, 255, 0.7);
+  font-size: 11px;
+  min-width: 72px;
+  letter-spacing: 1px;
+}
+
+#desktop-name {
+  color: rgba(255, 220, 80, 0.65);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+}
+
+#voice-state {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: rgba(0, 212, 255, 0.6);
+}
+
+.voice-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #333;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.voice-dot.idle      { background: rgba(0, 212, 255, 0.3); }
+.voice-dot.listening { background: #00ff88; box-shadow: 0 0 10px #00ff88; animation: pulse-green 1.5s infinite; }
+.voice-dot.thinking  { background: #ff6600; box-shadow: 0 0 10px #ff6600; animation: pulse-orange 0.8s infinite; }
+.voice-dot.speaking  { background: #0066ff; box-shadow: 0 0 10px #0066ff; animation: pulse-blue 0.5s infinite; }
+
+@keyframes pulse-green  { 0%,100%{opacity:1} 50%{opacity:0.45} }
+@keyframes pulse-orange { 0%,100%{opacity:1} 50%{opacity:0.55} }
+@keyframes pulse-blue   { 0%,100%{opacity:1} 50%{opacity:0.65} }
+
+#hud-close {
+  -webkit-app-region: no-drag;
+  background: none;
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  color: rgba(0, 212, 255, 0.45);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 9px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+#hud-close:hover { background: rgba(255,50,50,0.15); border-color: rgba(255,50,50,0.4); color: #ff4444; }
+
+/* ── Left info panel (floating overlay) ── */
+#left-panel {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  width: 210px;
+  bottom: 72px;
+  background: rgba(2, 8, 20, 0.62);
+  border-right: 1px solid rgba(0, 212, 255, 0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  z-index: 10;
+}
+
+.panel-section { flex: 1; overflow: hidden; }
+
+.section-title {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: rgba(0, 212, 255, 0.4);
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+  padding-bottom: 3px;
+}
+
+.info-item {
+  font-size: 9px;
+  color: rgba(0, 212, 255, 0.7);
+  padding: 2px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.info-item .item-time { color: rgba(0, 212, 255, 0.35); margin-right: 5px; }
+.info-item-empty { font-size: 8px; color: rgba(0, 212, 255, 0.2); font-style: italic; }
+
+/* ── Orb canvas (fullscreen Three.js background) ── */
+#orb-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* ── Gesture badge (center overlay) ── */
+#gesture-badge {
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 212, 255, 0.12);
+  border: 1px solid rgba(0, 212, 255, 0.35);
+  border-radius: 4px;
+  padding: 3px 12px;
+  color: #00d4ff;
+  font-size: 11px;
+  display: none;
+  white-space: nowrap;
+  z-index: 30;
+  text-shadow: 0 0 8px #00d4ff;
+}
+#gesture-badge.show { display: block; }
+
+/* ── Calibration overlay (full window) ── */
+#calibrate-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(2, 8, 20, 0.7);
+  color: #00d4ff;
+  font-size: 11px;
+  text-align: center;
+  z-index: 50;
+}
+#calibrate-overlay.show { display: flex; }
+#calibrate-crosshair {
+  width: 40px; height: 40px;
+  border: 2px solid #00d4ff;
+  border-radius: 50%;
+  position: relative;
+}
+#calibrate-crosshair::before { content:''; position:absolute; width:1px; height:100%; left:50%; transform:translateX(-50%); background:#00d4ff; }
+#calibrate-crosshair::after  { content:''; position:absolute; height:1px; width:100%; top:50%; transform:translateY(-50%); background:#00d4ff; }
+#calibrate-countdown { font-size: 28px; font-weight: bold; text-shadow: 0 0 20px #00d4ff; }
+
+/* ── Transcript bar (bottom overlay) ── */
+#transcript-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 72px;
+  background: rgba(2, 8, 20, 0.78);
+  border-top: 1px solid rgba(0, 212, 255, 0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 6px 16px 6px 220px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  overflow: hidden;
+  z-index: 20;
+}
+
+#transcript-log {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.transcript-entry {
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.transcript-entry.user { color: #00d4ff; }
+.transcript-entry.dobi { color: #00ff88; }
+.transcript-entry .entry-prefix { opacity: 0.45; margin-right: 5px; }
+
+/* ── Gesture guide (bottom-right) ── */
+#gesture-guide {
+  position: absolute;
+  bottom: 6px;
+  right: 16px;
+  font-size: 8px;
+  color: rgba(0, 212, 255, 0.28);
+  letter-spacing: 0.5px;
+  z-index: 21;
+  pointer-events: none;
+}
+
+/* ── Corner brackets ── */
+.corner-bracket {
+  position: absolute;
+  width: 14px; height: 14px;
+  border-color: rgba(0, 212, 255, 0.35);
+  border-style: solid;
+  z-index: 15;
+  pointer-events: none;
+}
+.cb-tl { top: 44px; left: 4px; border-width: 1px 0 0 1px; }
+.cb-tr { top: 44px; right: 4px; border-width: 1px 1px 0 0; }
+.cb-bl { bottom: 76px; left: 4px; border-width: 0 0 1px 1px; }
+.cb-br { bottom: 76px; right: 4px; border-width: 0 1px 1px 0; }
+
+/* ── Side accent bars ── */
+.side-bar {
+  position: absolute;
+  top: 40px; bottom: 72px;
+  width: 2px;
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, rgba(0,212,255,0.4) 30%, rgba(0,212,255,0.4) 70%, transparent);
+}
+.side-bar-l { left: 0; }
+.side-bar-r { right: 0; }
+
+/* ── Scan lines ── */
+#scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 3px,
+    rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px
+  );
+  animation: flicker 10s infinite;
+}
+@keyframes flicker {
+  0%,100%{opacity:1} 93%{opacity:1} 94%{opacity:0.9} 95%{opacity:1} 97%{opacity:0.95} 98%{opacity:1}
+}
+</style>
+</head>
+<body>
+<div id="hud-container">
+
+  <!-- Camera (full background, very transparent) -->
+  <video id="camera-video" autoplay playsinline muted></video>
+
+  <!-- Three.js particle orb (fullscreen background) -->
+  <canvas id="orb-canvas"></canvas>
+
+  <!-- Hands + Cat's cradle canvas (full size, on top of orb) -->
+  <canvas id="hands-canvas"></canvas>
+
+  <!-- Scan lines -->
+  <div id="scanlines"></div>
+
+  <!-- Side accent bars -->
+  <div class="side-bar side-bar-l"></div>
+  <div class="side-bar side-bar-r"></div>
+
+  <!-- Corner brackets -->
+  <div class="corner-bracket cb-tl"></div>
+  <div class="corner-bracket cb-tr"></div>
+  <div class="corner-bracket cb-bl"></div>
+  <div class="corner-bracket cb-br"></div>
+
+  <!-- Top status bar -->
+  <div id="status-bar">
+    <span id="logo">◈ J.A.R.V.I.S</span>
+    <span id="clock">00:00:00</span>
+    <span id="desktop-name">—</span>
+    <div id="voice-state">
+      <div class="voice-dot idle" id="voice-dot"></div>
+      <span id="voice-label">IDLE</span>
+    </div>
+    <button id="hud-close">✕</button>
+  </div>
+
+  <!-- Left info panel (floating) -->
+  <div id="left-panel">
+    <div class="panel-section">
+      <div class="section-title">◈ TODAY</div>
+      <div id="calendar-items"><div class="info-item-empty">로딩 중…</div></div>
+    </div>
+    <div class="panel-section">
+      <div class="section-title">◈ TASKS</div>
+      <div id="task-items"><div class="info-item-empty">없음</div></div>
+    </div>
+  </div>
+
+  <!-- Gesture badge (center) -->
+  <div id="gesture-badge"></div>
+
+  <!-- Calibration overlay -->
+  <div id="calibrate-overlay">
+    <div id="calibrate-crosshair"></div>
+    <div>오른손 검지를 십자선에 맞추세요</div>
+    <div id="calibrate-countdown">3</div>
+  </div>
+
+  <!-- Bottom transcript bar -->
+  <div id="transcript-bar">
+    <div id="transcript-log"></div>
+  </div>
+
+  <!-- Gesture guide -->
+  <div id="gesture-guide">✊ 인터럽트 &nbsp;|&nbsp; 🤚 승인 &nbsp;|&nbsp; ✌️ 음성토글 &nbsp;|&nbsp; 👆 포인터</div>
+
+</div>
+
+<!-- Three.js (local) -->
+<script type="importmap">{"imports":{"three":"./three.module.min.js"}}</script>
+
+<!-- MediaPipe Hands (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
+
+<script type="module">
+// ============================================================
+// J.A.R.V.I.S Unified HUD — 메인 로직
+// ============================================================
+import * as THREE from 'three';
+
+// ── 설정 상수 ──────────────────────────────────────────────
+const CONFIG = {
+  MOTION_WS_URL: 'ws://localhost:8340/ws/motion',
+  VOICE_WS_URL:  'ws://localhost:8340/ws/voice',
+  WS_RECONNECT_DELAY: 3000,
+
+  // 제스처 임계값
+  PINCH_THRESHOLD: 0.065,
+  SWIPE_VELOCITY: 0.7,
+  SWIPE_DISTANCE: 0.18,
+  SWIPE_DEBOUNCE_MS: 900,
+  CLICK_DEBOUNCE_MS: 500,
+  SCROLL_THROTTLE_MS: 50,
+
+  // 새 제스처 디바운스
+  FIST_DEBOUNCE_MS: 1500,
+  PALM_DEBOUNCE_MS: 2000,
+  VSIGN_DEBOUNCE_MS: 800,
+
+  // 손 추적
+  HAND_HISTORY: 20,
+  HAND_LOST_PAUSE_SEC: 3.0,
+
+  // 마우스 제어
+  MOUSE_SMOOTH: 0.35,
+  MOUSE_DEAD_ZONE: 0.004,
+
+  // HUD context 갱신 주기 (ms)
+  CONTEXT_REFRESH_MS: 60000,
+};
+
+// ── 랜드마크 인덱스 ──────────────────────────────────────────
+const LM = {
+  WRIST: 0,
+  THUMB_CMC: 1, THUMB_MCP: 2, THUMB_IP: 3, THUMB_TIP: 4,
+  INDEX_MCP: 5, INDEX_PIP: 6, INDEX_DIP: 7, INDEX_TIP: 8,
+  MIDDLE_MCP: 9, MIDDLE_PIP: 10, MIDDLE_DIP: 11, MIDDLE_TIP: 12,
+  RING_MCP: 13, RING_PIP: 14, RING_DIP: 15, RING_TIP: 16,
+  PINKY_MCP: 17, PINKY_PIP: 18, PINKY_DIP: 19, PINKY_TIP: 20,
+};
+
+const FINGERTIPS = [LM.THUMB_TIP, LM.INDEX_TIP, LM.MIDDLE_TIP, LM.RING_TIP, LM.PINKY_TIP];
+const CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [0,9],[9,10],[10,11],[11,12],
+  [0,13],[13,14],[14,15],[15,16],
+  [0,17],[17,18],[18,19],[19,20],
+  [5,9],[9,13],[13,17],
+];
+
+// ── 상태 ──────────────────────────────────────────────────
+let motionEnabled = false;
+let motionPaused  = false;
+let cameraRunning = false;
+let handLostTimer = null;
+
+let screenW = window.screen.width;
+let screenH = window.screen.height;
+
+const handHistory = { Left: [], Right: [] };
+let smoothX = null, smoothY = null;
+
+let lastSwipeTime   = 0;
+let lastClickTime   = 0;
+let lastScrollTime  = 0;
+let lastLeftClickTime  = 0;
+let lastRightClickTime = 0;
+let leftPinchActive  = false;
+let rightPinchActive = false;
+let pointerActive    = false;
+
+// 새 제스처 디바운스
+let lastFistTime   = 0;
+let lastPalmTime   = 0;
+let lastVSignTime  = 0;
+
+// Cat's cradle
+const tipSmooth = [
+  [null, null, null, null, null],
+  [null, null, null, null, null],
+];
+const TIP_SMOOTH_ALPHA = 0.42;
+let cradleAlpha = 0;
+const CRADLE_FADE_SPEED = 0.07;
+
+// Desktop state
+let activeDesktop = 1;
+let activeDesktopName = '';
+
+// Voice state
+let voiceState = 'idle';     // idle | listening | thinking | speaking
+let speechEnabled = true;    // V-sign toggle
+let recognition = null;
+let recognitionRunning = false;
+
+// Audio
+let audioCtx = null;
+let analyser = null;
+let audioQueue = [];
+let isPlayingAudio = false;
+const MAX_TRANSCRIPT = 6;
+
+// ── DOM 요소 ──────────────────────────────────────────────
+const video            = document.getElementById('camera-video');
+const handsCanvas      = document.getElementById('hands-canvas');
+const ctx              = handsCanvas.getContext('2d');
+const gestureBadge     = document.getElementById('gesture-badge');
+const calibrateOverlay = document.getElementById('calibrate-overlay');
+const calibrateCountdown = document.getElementById('calibrate-countdown');
+const btnMotionToggle  = document.getElementById('btn-motion-toggle');
+const btnClose         = document.getElementById('hud-close');
+const clockEl          = document.getElementById('clock');
+const desktopNameEl    = document.getElementById('desktop-name');
+const voiceDotEl       = document.getElementById('voice-dot');
+const voiceLabelEl     = document.getElementById('voice-label');
+const transcriptLog    = document.getElementById('transcript-log');
+const calendarItems    = document.getElementById('calendar-items');
+const taskItems        = document.getElementById('task-items');
+const orbCanvas        = document.getElementById('orb-canvas');
+let orb = null;
+
+// ── Electron IPC ─────────────────────────────────────────
+const eAPI = window.electronAPI;
+if (eAPI) {
+  eAPI.getScreenSize().then(({ width, height }) => {
+    screenW = width;
+    screenH = height;
+  }).catch(() => {});
+}
+
+// ── Clock ─────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mm = String(now.getMinutes()).padStart(2,'0');
+  const ss = String(now.getSeconds()).padStart(2,'0');
+  clockEl.textContent = `${hh}:${mm}:${ss}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Voice State Machine ───────────────────────────────────
+const STATE_LABELS = {
+  idle:      'IDLE',
+  listening: 'LISTENING',
+  thinking:  'THINKING',
+  speaking:  'SPEAKING',
+};
+
+function setVoiceState(state) {
+  voiceState = state;
+  voiceDotEl.className = 'voice-dot ' + state;
+  voiceLabelEl.textContent = STATE_LABELS[state] || state.toUpperCase();
+  if (orb) orb.setState(state);
+}
+
+// ── Transcript log ────────────────────────────────────────
+function addTranscript(role, text) {
+  const entry = document.createElement('div');
+  entry.className = 'transcript-entry ' + role;
+  const prefix = document.createElement('span');
+  prefix.className = 'entry-prefix';
+  prefix.textContent = role === 'user' ? '▸' : '◂';
+  entry.appendChild(prefix);
+  entry.appendChild(document.createTextNode(text));
+  transcriptLog.appendChild(entry);
+  // Keep only last MAX_TRANSCRIPT entries
+  while (transcriptLog.children.length > MAX_TRANSCRIPT) {
+    transcriptLog.removeChild(transcriptLog.firstChild);
+  }
+}
+
+// ── Audio Context (lazy init) ─────────────────────────────
+function ensureAudioCtx() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 64;
+  analyser.connect(audioCtx.destination);
+  if (orb) orb.setAnalyser(analyser);
+}
+
+async function playAudioChunk(base64data) {
+  ensureAudioCtx();
+  try {
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    const bytes = Uint8Array.from(atob(base64data), c => c.charCodeAt(0));
+    const buffer = await audioCtx.decodeAudioData(bytes.buffer);
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(analyser);
+    source.onended = () => {
+      audioQueue.shift();
+      if (audioQueue.length > 0) {
+        playAudioChunk(audioQueue[0]);
+      } else {
+        isPlayingAudio = false;
+        setVoiceState('listening');
+        startRecognition();
+      }
+    };
+    source.start(0);
+  } catch (err) {
+    console.error('[HUD] Audio decode error:', err);
+    audioQueue.shift();
+    if (audioQueue.length > 0) {
+      playAudioChunk(audioQueue[0]);
+    } else {
+      isPlayingAudio = false;
+      setVoiceState('listening');
+      startRecognition();
+    }
+  }
+}
+
+function enqueueAudio(base64data) {
+  audioQueue.push(base64data);
+  if (!isPlayingAudio) {
+    isPlayingAudio = true;
+    setVoiceState('speaking');
+    stopRecognition();
+    playAudioChunk(audioQueue[0]);
+  }
+}
+
+// Resume AudioContext on any user gesture
+['click','keydown'].forEach(evt => {
+  document.addEventListener(evt, () => {
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    } else {
+      ensureAudioCtx();
+    }
+  }, { once: false, passive: true });
+});
+
+// ── Motion WebSocket ──────────────────────────────────────
+let motionWS = null;
+let motionWSConnected = false;
+
+function connectMotionWS() {
+  if (motionWS && motionWS.readyState < 2) return;
+  try {
+    motionWS = new WebSocket(CONFIG.MOTION_WS_URL);
+    motionWS.onopen = () => {
+      motionWSConnected = true;
+      console.log('[HUD] Motion WS connected');
+    };
+    motionWS.onmessage = (e) => {
+      try { handleMotionMessage(JSON.parse(e.data)); } catch {}
+    };
+    motionWS.onclose = () => {
+      motionWSConnected = false;
+      setTimeout(connectMotionWS, CONFIG.WS_RECONNECT_DELAY);
+    };
+    motionWS.onerror = () => { motionWSConnected = false; };
+  } catch {
+    setTimeout(connectMotionWS, CONFIG.WS_RECONNECT_DELAY);
+  }
+}
+
+function sendMotionEvent(type, payload = {}) {
+  if (!motionWSConnected || !motionWS) return;
+  try { motionWS.send(JSON.stringify({ type, payload })); } catch {}
+}
+
+function handleMotionMessage(msg) {
+  if (msg.type === 'motion_status') {
+    const state = msg.state;
+    if (state === 'active') {
+      motionEnabled = true; motionPaused = false;
+      if (btnMotionToggle) { btnMotionToggle.textContent = '모션 ON'; btnMotionToggle.classList.add('active'); }
+    } else if (state === 'paused') {
+      motionPaused = true;
+    } else if (state === 'disabled') {
+      motionEnabled = false; motionPaused = false;
+      if (btnMotionToggle) { btnMotionToggle.textContent = '모션 OFF'; btnMotionToggle.classList.remove('active'); }
+      stopCamera();
+    }
+  } else if (msg.type === 'desktop_changed') {
+    activeDesktop = msg.index || activeDesktop;
+    activeDesktopName = msg.name || `데스크톱 ${activeDesktop}`;
+    desktopNameEl.textContent = activeDesktopName;
+  } else if (msg.type === 'motion_calibrate') {
+    startCalibration();
+  }
+}
+
+// ── Voice WebSocket ───────────────────────────────────────
+let voiceWS = null;
+let voiceWSConnected = false;
+
+function connectVoiceWS() {
+  if (voiceWS && voiceWS.readyState < 2) return;
+  try {
+    voiceWS = new WebSocket(CONFIG.VOICE_WS_URL);
+    voiceWS.onopen = () => {
+      voiceWSConnected = true;
+      console.log('[HUD] Voice WS connected');
+      setVoiceState('listening');
+    };
+    voiceWS.onmessage = (e) => {
+      if (e.data instanceof Blob) return;
+      try { handleVoiceMessage(JSON.parse(e.data)); } catch {}
+    };
+    voiceWS.onclose = () => {
+      voiceWSConnected = false;
+      setVoiceState('idle');
+      setTimeout(connectVoiceWS, CONFIG.WS_RECONNECT_DELAY);
+    };
+    voiceWS.onerror = () => { voiceWSConnected = false; };
+  } catch {
+    setTimeout(connectVoiceWS, CONFIG.WS_RECONNECT_DELAY);
+  }
+}
+
+function handleVoiceMessage(msg) {
+  if (msg.type === 'status') {
+    if (msg.state === 'thinking') {
+      setVoiceState('thinking');
+      stopRecognition();
+    } else if (msg.state === 'idle') {
+      setVoiceState('idle');
+    }
+  } else if (msg.type === 'audio') {
+    if (msg.text) addTranscript('dobi', msg.text);
+    enqueueAudio(msg.data);
+  }
+}
+
+function sendTranscript(text, isFinal) {
+  if (!voiceWSConnected || !voiceWS) return;
+  try {
+    voiceWS.send(JSON.stringify({ type: 'transcript', text, isFinal }));
+  } catch {}
+}
+
+// ── Web Speech API ────────────────────────────────────────
+function initRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    console.warn('[HUD] SpeechRecognition not available');
+    return;
+  }
+  recognition = new SpeechRecognition();
+  recognition.lang = 'ko-KR';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.onresult = (event) => {
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result = event.results[i];
+      const text = result[0].transcript.trim();
+      if (!text) continue;
+      if (result.isFinal) {
+        addTranscript('user', text);
+        sendTranscript(text, true);
+        setVoiceState('thinking');
+      }
+    }
+  };
+
+  recognition.onend = () => {
+    recognitionRunning = false;
+    // Auto-restart if we want it running
+    if (speechEnabled && !isPlayingAudio && voiceState !== 'thinking') {
+      setTimeout(startRecognition, 500);
+    }
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error !== 'aborted') console.warn('[HUD] Speech error:', e.error);
+    recognitionRunning = false;
+  };
+}
+
+function startRecognition() {
+  if (!recognition || recognitionRunning || !speechEnabled || isPlayingAudio) return;
+  try {
+    recognition.start();
+    recognitionRunning = true;
+    setVoiceState('listening');
+  } catch {}
+}
+
+function stopRecognition() {
+  if (!recognition || !recognitionRunning) return;
+  try {
+    recognition.abort();
+    recognitionRunning = false;
+  } catch {}
+}
+
+// ── HUD Context (calendar / tasks) ───────────────────────
+async function fetchHudContext() {
+  try {
+    const resp = await fetch('http://localhost:8340/api/hud-context');
+    if (!resp.ok) return;
+    const data = await resp.json();
+
+    // Calendar
+    if (Array.isArray(data.calendar) && data.calendar.length > 0) {
+      calendarItems.innerHTML = '';
+      data.calendar.slice(0, 4).forEach(ev => {
+        const item = document.createElement('div');
+        item.className = 'info-item';
+        item.innerHTML = `<span class="item-time">${ev.time || ''}</span>${ev.title || ev}`;
+        calendarItems.appendChild(item);
+      });
+    } else {
+      calendarItems.innerHTML = '<div class="info-item-empty">일정 없음</div>';
+    }
+
+    // Tasks
+    if (Array.isArray(data.tasks) && data.tasks.length > 0) {
+      taskItems.innerHTML = '';
+      data.tasks.slice(0, 4).forEach(t => {
+        const item = document.createElement('div');
+        item.className = 'info-item';
+        const title = t.title || t.prompt || JSON.stringify(t);
+        item.textContent = title.length > 30 ? title.slice(0, 28) + '…' : title;
+        taskItems.appendChild(item);
+      });
+    } else {
+      taskItems.innerHTML = '<div class="info-item-empty">없음</div>';
+    }
+
+    // Desktop
+    if (data.active_desktop) {
+      activeDesktop = data.active_desktop;
+    }
+    if (data.project && data.project.name) {
+      activeDesktopName = data.project.name;
+      desktopNameEl.textContent = activeDesktopName;
+    }
+  } catch {}
+}
+
+// ── Canvas resize (hands-canvas) ─────────────────────────
+function resizeHandsCanvas() {
+  const rect = handsCanvas.parentElement.getBoundingClientRect();
+  handsCanvas.width  = rect.width;
+  handsCanvas.height = rect.height;
+}
+window.addEventListener('resize', resizeHandsCanvas);
+resizeHandsCanvas();
+
+// ── Camera ────────────────────────────────────────────────
+let mpCamera = null;
+let mpHands  = null;
+
+async function startCamera() {
+  if (cameraRunning) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480, facingMode: 'user' }
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    if (!mpHands) {
+      mpHands = new Hands({
+        locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`
+      });
+      mpHands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.5,
+      });
+      mpHands.onResults(onHandsResults);
+    }
+
+    mpCamera = new Camera(video, {
+      onFrame: async () => {
+        if (mpHands && cameraRunning) {
+          await mpHands.send({ image: video });
+        }
+      },
+      width: 640,
+      height: 480,
+    });
+    await mpCamera.start();
+    cameraRunning = true;
+  } catch (err) {
+    console.error('[HUD] Camera error:', err);
+  }
+}
+
+function stopCamera() {
+  if (!cameraRunning) return;
+  cameraRunning = false;
+  if (mpCamera) { try { mpCamera.stop(); } catch {} mpCamera = null; }
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+  ctx.clearRect(0, 0, handsCanvas.width, handsCanvas.height);
+}
+
+// ── Hand history ──────────────────────────────────────────
+function updateHandHistory(label, wristLM) {
+  const history = handHistory[label] || (handHistory[label] = []);
+  history.push({ x: wristLM.x, y: wristLM.y, t: Date.now() });
+  if (history.length > CONFIG.HAND_HISTORY) history.shift();
+}
+
+// ── Hand visualization ────────────────────────────────────
+function mirrorX(x, W) { return (1 - x) * W; }
+function toCanvasY(y, H) { return y * H; }
+
+function drawHand(landmarks, label, W, H) {
+  const isLeft = label === 'Left';
+  const baseColor = isLeft ? '#00ffff' : '#ff00ff';
+
+  ctx.save();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = baseColor + '80';
+  ctx.shadowBlur = 6;
+  ctx.shadowColor = baseColor;
+
+  for (const [a, b] of CONNECTIONS) {
+    const lmA = landmarks[a], lmB = landmarks[b];
+    ctx.beginPath();
+    ctx.moveTo(mirrorX(lmA.x, W), toCanvasY(lmA.y, H));
+    ctx.lineTo(mirrorX(lmB.x, W), toCanvasY(lmB.y, H));
+    ctx.stroke();
+  }
+
+  for (let i = 0; i < landmarks.length; i++) {
+    const lm = landmarks[i];
+    const isTip = FINGERTIPS.includes(i);
+    const r = isTip ? 5 : 3;
+    const color = isTip ? '#ffffff' : baseColor;
+    ctx.shadowBlur = isTip ? 14 : 8;
+    ctx.shadowColor = color;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(mirrorX(lm.x, W), toCanvasY(lm.y, H), r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ── Cat's cradle ──────────────────────────────────────────
+const CRADLE_STRINGS = [
+  [0, 0, '#00ffff', false],
+  [1, 1, '#ff00ff', false],
+  [2, 2, '#ffff00', false],
+  [3, 3, '#00ff88', false],
+  [4, 4, '#ff6600', false],
+  [1, 2, '#aa44ff', true],
+  [2, 1, '#ff44aa', true],
+  [3, 4, '#44ffcc', true],
+  [4, 3, '#ffcc44', true],
+];
+
+function drawCatsCradle(W, H) {
+  if (cradleAlpha < 0.01) return;
+  if (tipSmooth[0].some(t => !t) || tipSmooth[1].some(t => !t)) return;
+
+  ctx.save();
+  for (const [li, ri, color, isCross] of CRADLE_STRINGS) {
+    const aTip = tipSmooth[0][li];
+    const bTip = tipSmooth[1][ri];
+    const x1 = mirrorX(aTip.x, W), y1 = toCanvasY(aTip.y, H);
+    const x2 = mirrorX(bTip.x, W), y2 = toCanvasY(bTip.y, H);
+    const dist = Math.hypot(x2 - x1, y2 - y1) / Math.max(W, H);
+    const tension = Math.min(dist * 2.2, 1.0);
+    const baseThick = isCross ? 2.0 : 2.8;
+    const thickness = Math.max(0.8, baseThick - tension * (isCross ? 0.8 : 1.8));
+    const glow      = isCross ? (10 + tension * 18) : (14 + tension * 28);
+    const baseAlpha = isCross ? 0.62 : 0.72;
+    const lineAlpha = baseAlpha + tension * (isCross ? 0.18 : 0.24);
+    const cx = (x1 + x2) / 2;
+    const sagSign = isCross ? 0.07 : -0.09;
+    const cy = (y1 + y2) / 2 + sagSign * tension * H;
+
+    for (let pass = 0; pass < 2; pass++) {
+      const passThick = pass === 0 ? thickness * 3.2 : thickness;
+      const passAlpha = pass === 0 ? lineAlpha * 0.22 : lineAlpha;
+      const passGlow  = pass === 0 ? glow * 1.8 : glow;
+      ctx.globalAlpha = cradleAlpha * passAlpha;
+      ctx.lineWidth   = passThick;
+      ctx.shadowBlur  = passGlow;
+      ctx.shadowColor = color;
+      ctx.strokeStyle = color;
+      ctx.lineCap     = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(cx, cy, x2, y2);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1.0;
+}
+
+// ── MediaPipe results ─────────────────────────────────────
+function onHandsResults(results) {
+  const W = handsCanvas.width;
+  const H = handsCanvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const hands      = results.multiHandLandmarks || [];
+  const handedness = results.multiHandedness    || [];
+
+  if (hands.length === 0) {
+    if (!handLostTimer && motionEnabled && !motionPaused) {
+      handLostTimer = setTimeout(() => {
+        sendMotionEvent('motion.status.hand_lost');
+        motionPaused = true;
+      }, CONFIG.HAND_LOST_PAUSE_SEC * 1000);
+    }
+    cradleAlpha = Math.max(0, cradleAlpha - CRADLE_FADE_SPEED);
+    if (cradleAlpha > 0) drawCatsCradle(W, H);
+    return;
+  }
+
+  if (handLostTimer) { clearTimeout(handLostTimer); handLostTimer = null; }
+  if (motionPaused && motionEnabled) {
+    sendMotionEvent('motion.status.hand_detected');
+    motionPaused = false;
+  }
+
+  const handMap = {};
+  for (let i = 0; i < hands.length; i++) {
+    const label = handedness[i]?.classification?.[0]?.label || 'Unknown';
+    handMap[label] = hands[i];
+    updateHandHistory(label, hands[i][LM.WRIST]);
+  }
+
+  for (let hi = 0; hi < Math.min(hands.length, 2); hi++) {
+    FINGERTIPS.forEach((lmIdx, fi) => {
+      const lm = hands[hi][lmIdx];
+      if (!tipSmooth[hi][fi]) tipSmooth[hi][fi] = { x: lm.x, y: lm.y };
+      else {
+        tipSmooth[hi][fi].x = TIP_SMOOTH_ALPHA * lm.x + (1 - TIP_SMOOTH_ALPHA) * tipSmooth[hi][fi].x;
+        tipSmooth[hi][fi].y = TIP_SMOOTH_ALPHA * lm.y + (1 - TIP_SMOOTH_ALPHA) * tipSmooth[hi][fi].y;
+      }
+    });
+  }
+
+  const bothHandsDetected = hands.length >= 2;
+  cradleAlpha = Math.max(0, Math.min(1, cradleAlpha + (bothHandsDetected ? CRADLE_FADE_SPEED : -CRADLE_FADE_SPEED)));
+
+  for (let i = 0; i < hands.length; i++) {
+    const label = handedness[i]?.classification?.[0]?.label || 'Unknown';
+    drawHand(hands[i], label, W, H);
+  }
+  drawCatsCradle(W, H);
+
+  if (motionEnabled && !motionPaused) {
+    recognizeGestures(handMap, W, H);
+  }
+}
+
+// ── Gesture helpers ───────────────────────────────────────
+function dist2D(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+function isFingerExtended(hand, tipIdx, pipIdx) {
+  return hand[tipIdx].y < hand[pipIdx].y;
+}
+
+function isFistGesture(hand) {
+  // All 4 finger tips below their PIP joints (thumb excluded)
+  return (
+    hand[LM.INDEX_TIP].y  > hand[LM.INDEX_PIP].y &&
+    hand[LM.MIDDLE_TIP].y > hand[LM.MIDDLE_PIP].y &&
+    hand[LM.RING_TIP].y   > hand[LM.RING_PIP].y &&
+    hand[LM.PINKY_TIP].y  > hand[LM.PINKY_PIP].y
+  );
+}
+
+function isPalmGesture(hand) {
+  // All 5 fingertips above their PIP joints
+  return (
+    hand[LM.THUMB_TIP].y  < hand[LM.THUMB_IP].y &&
+    hand[LM.INDEX_TIP].y  < hand[LM.INDEX_PIP].y &&
+    hand[LM.MIDDLE_TIP].y < hand[LM.MIDDLE_PIP].y &&
+    hand[LM.RING_TIP].y   < hand[LM.RING_PIP].y &&
+    hand[LM.PINKY_TIP].y  < hand[LM.PINKY_PIP].y
+  );
+}
+
+function isVSignGesture(hand) {
+  // Index + middle extended, others closed
+  const indexUp  = hand[LM.INDEX_TIP].y  < hand[LM.INDEX_PIP].y;
+  const middleUp = hand[LM.MIDDLE_TIP].y < hand[LM.MIDDLE_PIP].y;
+  const ringDown  = hand[LM.RING_TIP].y   > hand[LM.RING_PIP].y;
+  const pinkyDown = hand[LM.PINKY_TIP].y  > hand[LM.PINKY_PIP].y;
+  return indexUp && middleUp && ringDown && pinkyDown;
+}
+
+// ── Gesture recognition ───────────────────────────────────
+function recognizeGestures(handMap, W, H) {
+  const now = Date.now();
+  const rightHand = handMap.Right;
+  const leftHand  = handMap.Left;
+
+  // ── Swipe ────────────────────────────────────────────────
+  for (const label of ['Right', 'Left']) {
+    const history = handHistory[label];
+    if (!history || history.length < 10) continue;
+    const swipe = detectSwipe(history, now);
+    if (swipe && (now - lastSwipeTime) > CONFIG.SWIPE_DEBOUNCE_MS) {
+      lastSwipeTime = now;
+      if (swipe === 'right') {
+        sendMotionEvent('motion.desktop.next');
+        showGesture('→ 다음 데스크톱');
+        activeDesktop++;
+        desktopNameEl.textContent = `데스크톱 ${activeDesktop}`;
+      } else {
+        sendMotionEvent('motion.desktop.previous');
+        showGesture('← 이전 데스크톱');
+        if (activeDesktop > 1) activeDesktop--;
+        desktopNameEl.textContent = `데스크톱 ${activeDesktop}`;
+      }
+      handHistory[label] = [];
+      break;
+    }
+  }
+
+  // ── New gestures (use either hand) ───────────────────────
+  const primaryHand = rightHand || leftHand;
+  if (primaryHand) {
+    // Fist → Ctrl+C
+    if (isFistGesture(primaryHand) && (now - lastFistTime) > CONFIG.FIST_DEBOUNCE_MS) {
+      lastFistTime = now;
+      sendMotionEvent('gesture', { gesture: 'fist' });
+      showGesture('✊ 인터럽트', 1200);
+    }
+    // Palm → y+Enter
+    else if (isPalmGesture(primaryHand) && (now - lastPalmTime) > CONFIG.PALM_DEBOUNCE_MS) {
+      lastPalmTime = now;
+      sendMotionEvent('gesture', { gesture: 'palm' });
+      showGesture('🤚 승인', 1200);
+    }
+    // V-sign → toggle speech
+    else if (isVSignGesture(primaryHand) && (now - lastVSignTime) > CONFIG.VSIGN_DEBOUNCE_MS) {
+      lastVSignTime = now;
+      speechEnabled = !speechEnabled;
+      if (speechEnabled) {
+        showGesture('✌️ 음성 ON', 1200);
+        startRecognition();
+      } else {
+        showGesture('✌️ 음성 OFF', 1200);
+        stopRecognition();
+        setVoiceState('idle');
+      }
+    }
+  }
+
+  if (!rightHand) return;
+
+  // ── Pointer mode ──────────────────────────────────────────
+  const indexExtended = rightHand[LM.INDEX_TIP].y < rightHand[LM.INDEX_PIP].y - 0.03;
+  const middleFolded  = rightHand[LM.MIDDLE_TIP].y > rightHand[LM.MIDDLE_PIP].y;
+  pointerActive = indexExtended && middleFolded;
+
+  // ── Mouse move ────────────────────────────────────────────
+  if (pointerActive) {
+    const tip = rightHand[LM.INDEX_TIP];
+    const rawX = tip.x * screenW;
+    const rawY = tip.y * screenH;
+    if (smoothX === null) { smoothX = rawX; smoothY = rawY; }
+    const dx = rawX - smoothX;
+    const dy = rawY - smoothY;
+    const threshold = CONFIG.MOUSE_DEAD_ZONE * screenW;
+    if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
+      smoothX = CONFIG.MOUSE_SMOOTH * rawX + (1 - CONFIG.MOUSE_SMOOTH) * smoothX;
+      smoothY = CONFIG.MOUSE_SMOOTH * rawY + (1 - CONFIG.MOUSE_SMOOTH) * smoothY;
+      sendMotionEvent('motion.mouse.move', { x: Math.round(smoothX), y: Math.round(smoothY) });
+      const px = mirrorX(tip.x, W), py = toCanvasY(tip.y, H);
+      ctx.save();
+      ctx.strokeStyle = '#ffff00';
+      ctx.shadowColor = '#ffff00';
+      ctx.shadowBlur  = 20;
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.arc(px, py, 10, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Left click (thumb + index pinch)
+    const leftPinchDist = dist2D(rightHand[LM.THUMB_TIP], rightHand[LM.INDEX_TIP]);
+    const isPinchLeft = leftPinchDist < CONFIG.PINCH_THRESHOLD;
+    if (isPinchLeft && !leftPinchActive && (now - lastLeftClickTime) > CONFIG.CLICK_DEBOUNCE_MS) {
+      leftPinchActive = true;
+      lastLeftClickTime = now;
+      sendMotionEvent('motion.mouse.left_click', { x: Math.round(smoothX), y: Math.round(smoothY) });
+      showGesture('좌클릭');
+    } else if (!isPinchLeft) { leftPinchActive = false; }
+
+    // Right click (thumb + middle pinch)
+    const rightPinchDist = dist2D(rightHand[LM.THUMB_TIP], rightHand[LM.MIDDLE_TIP]);
+    const isPinchRight = rightPinchDist < CONFIG.PINCH_THRESHOLD;
+    if (isPinchRight && !rightPinchActive && (now - lastRightClickTime) > CONFIG.CLICK_DEBOUNCE_MS) {
+      rightPinchActive = true;
+      lastRightClickTime = now;
+      sendMotionEvent('motion.mouse.right_click', { x: Math.round(smoothX), y: Math.round(smoothY) });
+      showGesture('우클릭');
+    } else if (!isPinchRight) { rightPinchActive = false; }
+  } else {
+    smoothX = null; smoothY = null;
+    leftPinchActive = false;
+    rightPinchActive = false;
+  }
+
+  // ── Scroll ────────────────────────────────────────────────
+  if (now - lastScrollTime > CONFIG.SCROLL_THROTTLE_MS) {
+    const history = handHistory.Right;
+    if (history && history.length >= 3) {
+      const recent = history.slice(-3);
+      const dy = recent[recent.length-1].y - recent[0].y;
+      if (Math.abs(dy) > 0.015) {
+        lastScrollTime = now;
+        sendMotionEvent('motion.mouse.scroll', { dy: -dy * 8 });
+      }
+    }
+  }
+}
+
+// ── Swipe detection ───────────────────────────────────────
+function detectSwipe(history, now) {
+  if (history.length < 10) return null;
+  const recent = history.slice(-12);
+  const first = recent[0];
+  const last  = recent[recent.length - 1];
+  const dt = last.t - first.t;
+  if (dt > 1200 || dt < 80) return null;
+  const dx = last.x - first.x;
+  const dy = last.y - first.y;
+  const velocity = Math.abs(dx) / (dt / 1000);
+  if (Math.abs(dx) < CONFIG.SWIPE_DISTANCE) return null;
+  if (Math.abs(dx) < Math.abs(dy) * 1.5) return null;
+  if (velocity < CONFIG.SWIPE_VELOCITY) return null;
+  return dx > 0 ? 'right' : 'left';
+}
+
+// ── Gesture badge ─────────────────────────────────────────
+function showGesture(text, durationMs = 800) {
+  gestureBadge.textContent = text;
+  gestureBadge.classList.add('show');
+  clearTimeout(showGesture._timer);
+  showGesture._timer = setTimeout(() => gestureBadge.classList.remove('show'), durationMs);
+}
+
+// ── Calibration ───────────────────────────────────────────
+function startCalibration() {
+  calibrateOverlay.classList.add('show');
+  let count = 3;
+  calibrateCountdown.textContent = count;
+  const timer = setInterval(() => {
+    count--;
+    calibrateCountdown.textContent = count;
+    if (count <= 0) {
+      clearInterval(timer);
+      calibrateOverlay.classList.remove('show');
+      sendMotionEvent('motion_control.calibrate_done', {});
+      showGesture('보정 완료');
+    }
+  }, 1000);
+}
+
+// ── UI events ─────────────────────────────────────────────
+if (btnMotionToggle) btnMotionToggle.addEventListener('click', () => {
+  if (!motionEnabled) {
+    sendMotionEvent('motion_control.enable');
+    startCamera();
+  } else {
+    sendMotionEvent('motion_control.disable');
+  }
+});
+
+btnClose.addEventListener('click', () => {
+  if (eAPI) eAPI.close();
+  else window.close();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && motionEnabled) {
+    sendMotionEvent('motion_control.pause');
+    showGesture('ESC — 일시정지');
+  }
+});
+
+// ── Three.js Particle Orb ─────────────────────────────────
+function createOrb(canvas) {
+  let destroyed = false;
+  const N = 2000;
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x000000, 0);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+  camera.position.z = 80;
+
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(N * 3);
+  const vel = new Float32Array(N * 3);
+  const phase = new Float32Array(N);
+
+  for (let i = 0; i < N; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    const r = Math.pow(Math.random(), 0.5) * 25;
+    pos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+    pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+    pos[i*3+2] = r * Math.cos(phi);
+    phase[i] = Math.random() * 1000;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+
+  const mat = new THREE.PointsMaterial({
+    color: 0x4ca8e8, size: 0.4, transparent: true, opacity: 0.6,
+    sizeAttenuation: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const points = new THREE.Points(geo, mat);
+  scene.add(points);
+
+  const MAX_LINES = 8000;
+  const linePos = new Float32Array(MAX_LINES * 6);
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(linePos, 3));
+  lineGeo.setDrawRange(0, 0);
+  const lineMat = new THREE.LineBasicMaterial({
+    color: 0x4ca8e8, transparent: true, opacity: 0.0,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const lines = new THREE.LineSegments(lineGeo, lineMat);
+  scene.add(lines);
+
+  const MAX_ELECTRONS = 200;
+  const electronGeo = new THREE.BufferGeometry();
+  const electronPos = new Float32Array(MAX_ELECTRONS * 3);
+  electronGeo.setAttribute('position', new THREE.BufferAttribute(electronPos, 3));
+  electronGeo.setDrawRange(0, 0);
+  const electronMat = new THREE.PointsMaterial({
+    color: 0xffffff, size: 0.8, transparent: true, opacity: 1.0,
+    sizeAttenuation: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const electrons = new THREE.Points(electronGeo, electronMat);
+  scene.add(electrons);
+
+  let activeElectrons = [];
+  let electronSpawnRate = 0, targetElectronRate = 0, lastElectronSpawn = 0;
+  let activeConnections = [];
+
+  let orbState = 'idle';
+  let targetRadius = 25, currentRadius = 25;
+  let targetSpeed = 0.3, currentSpeed = 0.3;
+  let targetBright = 0.6, currentBright = 0.6;
+  let targetSize = 0.4, currentSize = 0.4;
+  let lineAmount = 0, targetLineAmount = 0;
+  let lineDistance = 8;
+  let spinX = 0, spinY = 0, spinZ = 0;
+  let transitionEnergy = 0, lastOrbState = 'idle';
+  let cloudZ = 0, cloudZVel = 0;
+  let orbAnalyser = null;
+  let freqData = new Uint8Array(64);
+  let bass = 0, mid = 0;
+
+  const clock = new THREE.Clock();
+
+  function orbAnimate() {
+    if (destroyed) return;
+    requestAnimationFrame(orbAnimate);
+    const t = clock.getElapsedTime();
+
+    switch (orbState) {
+      case 'idle':      targetRadius=28; targetSpeed=0.2; targetBright=0.5; targetSize=0.35; targetLineAmount=0.15; targetElectronRate=0; break;
+      case 'listening': targetRadius=22; targetSpeed=0.3; targetBright=0.65; targetSize=0.4; targetLineAmount=0.4; targetElectronRate=0; break;
+      case 'thinking':  targetRadius=16; targetSpeed=0.5; targetBright=0.7; targetSize=0.3; targetLineAmount=1.0; targetElectronRate=0.015; break;
+      case 'speaking':  targetRadius=18; targetSpeed=0.2; targetBright=0.7; targetSize=0.4; targetLineAmount=0.8; targetElectronRate=0; break;
+    }
+
+    currentRadius += (targetRadius - currentRadius) * 0.02;
+    currentSpeed  += (targetSpeed  - currentSpeed)  * 0.02;
+    currentBright += (targetBright - currentBright) * 0.02;
+    currentSize   += (targetSize   - currentSize)   * 0.02;
+    lineAmount    += (targetLineAmount - lineAmount) * 0.02;
+    electronSpawnRate += (targetElectronRate - electronSpawnRate) * 0.02;
+
+    if (orbState !== lastOrbState) { transitionEnergy = 1.0; lastOrbState = orbState; }
+    transitionEnergy *= 0.985;
+    if (transitionEnergy > 0.05) {
+      spinX += transitionEnergy * 0.012 * Math.sin(t * 1.7);
+      spinY += transitionEnergy * 0.015;
+      spinZ += transitionEnergy * 0.008 * Math.cos(t * 1.3);
+    }
+
+    bass = 0; mid = 0;
+    if (orbAnalyser) {
+      orbAnalyser.getByteFrequencyData(freqData);
+      let bSum = 0, mSum = 0;
+      for (let i = 0; i < 8; i++) bSum += freqData[i];
+      for (let i = 8; i < 24; i++) mSum += freqData[i];
+      bass = bSum / (8 * 255); mid = mSum / (16 * 255);
+    }
+
+    let zTarget = Math.sin(t * 0.12) * 8;
+    if (orbState === 'thinking') zTarget = Math.sin(t * 0.3) * 15 + Math.sin(t * 0.9) * 6;
+    else if (orbState === 'speaking') zTarget = Math.sin(t * 0.15) * 6 - bass * 10;
+    cloudZVel += (zTarget - cloudZ) * 0.008;
+    cloudZVel *= 0.94;
+    cloudZ += cloudZVel;
+
+    points.rotation.x = spinX; points.rotation.y = spinY; points.rotation.z = spinZ;
+    points.position.z = cloudZ;
+    lines.rotation.x  = spinX; lines.rotation.y  = spinY; lines.rotation.z  = spinZ;
+    lines.position.z  = cloudZ;
+
+    const p = geo.getAttribute('position');
+    const a = p.array;
+    for (let i = 0; i < N; i++) {
+      const i3 = i * 3;
+      let x = a[i3], y = a[i3+1], z = a[i3+2];
+      const px = phase[i];
+      vel[i3]   += Math.sin(t*0.05+px)*0.001*currentSpeed;
+      vel[i3+1] += Math.cos(t*0.06+px*1.3)*0.001*currentSpeed;
+      vel[i3+2] += Math.sin(t*0.055+px*0.7)*0.001*currentSpeed;
+      vel[i3]   += Math.sin(t*0.02+px*2.1+y*0.1)*0.0008*currentSpeed;
+      vel[i3+1] += Math.cos(t*0.025+px*1.7+z*0.1)*0.0008*currentSpeed;
+      vel[i3+2] += Math.sin(t*0.022+px*0.9+x*0.1)*0.0008*currentSpeed;
+      const dist = Math.sqrt(x*x+y*y+z*z) || 0.01;
+      const pull = Math.max(0, dist - currentRadius) * 0.002 + 0.0003;
+      vel[i3]   -= (x/dist)*pull; vel[i3+1] -= (y/dist)*pull; vel[i3+2] -= (z/dist)*pull;
+      if (bass > 0.05) {
+        vel[i3] += (x/dist)*bass*0.02; vel[i3+1] += (y/dist)*bass*0.02; vel[i3+2] += (z/dist)*bass*0.02;
+      }
+      if (orbState === 'speaking' && mid > 0.1) {
+        const pulse = Math.sin(t*8+px);
+        vel[i3] += (x/dist)*mid*0.012*pulse; vel[i3+1] += (y/dist)*mid*0.012*pulse;
+      }
+      vel[i3]*=0.992; vel[i3+1]*=0.992; vel[i3+2]*=0.992;
+      a[i3]+=vel[i3]; a[i3+1]+=vel[i3+1]; a[i3+2]+=vel[i3+2];
+    }
+    p.needsUpdate = true;
+
+    if (lineAmount > 0.01) {
+      const lp = lineGeo.getAttribute('position');
+      const la = lp.array;
+      let lineCount = 0;
+      const maxDist = lineDistance * (1 + bass * 0.5);
+      const maxDistSq = maxDist * maxDist;
+      const step = Math.max(1, Math.floor(N / 600));
+      for (let i = 0; i < N && lineCount < MAX_LINES; i += step) {
+        const i3 = i*3;
+        const x1=a[i3], y1=a[i3+1], z1=a[i3+2];
+        for (let j = i+step; j < N && lineCount < MAX_LINES; j += step) {
+          const j3 = j*3;
+          const dx=a[j3]-x1, dy=a[j3+1]-y1, dz=a[j3+2]-z1;
+          if (dx*dx+dy*dy+dz*dz < maxDistSq) {
+            const idx = lineCount*6;
+            la[idx]=x1; la[idx+1]=y1; la[idx+2]=z1;
+            la[idx+3]=a[j3]; la[idx+4]=a[j3+1]; la[idx+5]=a[j3+2];
+            lineCount++;
+          }
+        }
+      }
+      lineGeo.setDrawRange(0, lineCount*2);
+      lp.needsUpdate = true;
+      lineMat.opacity = lineAmount * 0.12;
+      activeConnections = [];
+      for (let c = 0; c < Math.min(lineCount, 500); c++) {
+        const ci = c*6;
+        activeConnections.push({x1:la[ci],y1:la[ci+1],z1:la[ci+2],x2:la[ci+3],y2:la[ci+4],z2:la[ci+5]});
+      }
+    } else {
+      lineGeo.setDrawRange(0, 0);
+      activeConnections = [];
+    }
+
+    if (activeConnections.length > 0 && electronSpawnRate > 0.005) {
+      if (activeElectrons.length < 3 && (t - lastElectronSpawn) > 1.0) {
+        const conn = activeConnections[Math.floor(Math.random() * activeConnections.length)];
+        activeElectrons.push({sx:conn.x1,sy:conn.y1,sz:conn.z1,ex:conn.x2,ey:conn.y2,ez:conn.z2,t:0,speed:0.003+Math.random()*0.003});
+        lastElectronSpawn = t;
+      }
+    }
+    const ep = electronGeo.getAttribute('position');
+    const ea = ep.array;
+    let aliveCount = 0;
+    for (let e = activeElectrons.length-1; e >= 0; e--) {
+      const el = activeElectrons[e];
+      el.t += el.speed;
+      if (el.t >= 1) { activeElectrons.splice(e,1); continue; }
+      const ei = aliveCount*3;
+      ea[ei]=el.sx+(el.ex-el.sx)*el.t; ea[ei+1]=el.sy+(el.ey-el.sy)*el.t; ea[ei+2]=el.sz+(el.ez-el.sz)*el.t;
+      aliveCount++;
+    }
+    electronGeo.setDrawRange(0, aliveCount);
+    ep.needsUpdate = true;
+    electrons.rotation.x=spinX; electrons.rotation.y=spinY; electrons.rotation.z=spinZ;
+    electrons.position.z=cloudZ;
+
+    mat.opacity = currentBright + bass * 0.08;
+    mat.size = currentSize + bass * 0.05;
+
+    if (orbState==='thinking')       { mat.color.lerp(new THREE.Color(0x6ec4ff),0.015); lineMat.color.lerp(new THREE.Color(0x6ec4ff),0.015); }
+    else if (orbState==='speaking')  { mat.color.lerp(new THREE.Color(0x5ab8f0),0.015); lineMat.color.lerp(new THREE.Color(0x5ab8f0),0.015); }
+    else                             { mat.color.lerp(new THREE.Color(0x4ca8e8),0.015); lineMat.color.lerp(new THREE.Color(0x4ca8e8),0.015); }
+
+    camera.position.x = Math.sin(t*0.02)*5;
+    camera.position.y = Math.cos(t*0.03)*3;
+    camera.lookAt(0, 0, cloudZ*0.2);
+
+    renderer.render(scene, camera);
+  }
+
+  function onOrbResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+  window.addEventListener('resize', onOrbResize);
+  orbAnimate();
+
+  return {
+    setState(s) { orbState = s; },
+    setAnalyser(a) { orbAnalyser = a; if (a) freqData = new Uint8Array(a.frequencyBinCount); },
+    destroy() { destroyed=true; window.removeEventListener('resize',onOrbResize); renderer.dispose(); },
+  };
+}
+
+
+// ── Start ─────────────────────────────────────────────────
+connectMotionWS();
+connectVoiceWS();
+setVoiceState('idle');
+desktopNameEl.textContent = `데스크톱 ${activeDesktop}`;
+
+// Init speech recognition after load
+setTimeout(() => {
+  initRecognition();
+  startRecognition();
+}, 1000);
+
+// Fetch HUD context
+fetchHudContext();
+setInterval(fetchHudContext, CONFIG.CONTEXT_REFRESH_MS);
+
+// Init Three.js orb
+orb = createOrb(orbCanvas);
+
+// Auto-start camera and motion recognition
+setTimeout(async () => {
+  try {
+    await startCamera();
+    motionEnabled = true;
+    sendMotionEvent('motion_control.enable');
+    console.log('[HUD] 모션 인식 자동 시작');
+  } catch (err) {
+    console.warn('[HUD] 카메라 자동 시작 실패:', err);
+  }
+}, 1500);
+
+console.log('[HUD] J.A.R.V.I.S Unified HUD 시작됨');
+</script>
+</body>
+</html>

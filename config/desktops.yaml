@@ -1,0 +1,52 @@
+# 도비일번 데스크톱/Space 프로젝트 매핑 설정
+#
+# 각 데스크톱 번호에 프로젝트 정보를 매핑한다.
+# 데스크톱 번호는 macOS Mission Control의 Space 순서와 일치해야 한다.
+#
+# 음성 명령 예시:
+#   "도비일번, agent-portal로 이동해"
+#   "도비일번, 2번 데스크톱으로 이동해"
+#   "도비일번, mcp-opendart 프로젝트로 이동해"
+#   "도비일번, 현재 데스크톱을 3번으로 맞춰"
+
+desktops:
+  1:
+    name: "도비일번 메인"
+    project_path: "~/Workspace/dobby"
+    role: main_control
+    description: "도비일번 메인 화면. 음성 명령, 모션 제어 허브."
+
+  2:
+    name: "agent-portal"
+    project_path: "~/Workspace/agent-portal"
+    role: development_project
+    description: "에이전트 포털 프로젝트"
+
+  3:
+    name: "mcp-opendart"
+    project_path: "~/Workspace/mcp-opendart"
+    role: development_project
+    description: "MCP OpenDART 프로젝트"
+
+  4:
+    name: "sourceport"
+    project_path: "~/Workspace/sourceport.ai"
+    role: development_project
+    description: "sourceport.ai 프로젝트"
+
+  5:
+    name: "기타"
+    project_path: "~/Workspace"
+    role: misc
+    description: "기타 작업 공간"
+
+# 설정 조정
+settings:
+  swipe_velocity_threshold: 0.8   # 스와이프 속도 임계값 (정규화 좌표/초)
+  swipe_distance_threshold: 0.2   # 스와이프 최소 이동 거리
+  pinch_threshold: 0.06           # pinch 감지 임계값 (정규화 좌표)
+  desktop_switch_debounce: 1.0    # 데스크톱 전환 최소 간격 (초)
+  mouse_smooth_alpha: 0.4         # 마우스 EMA 스무딩 (0=no smooth, 1=max smooth)
+  mouse_dead_zone: 0.005          # 마우스 이동 무시 임계값
+  hand_lost_auto_pause_sec: 3.0   # 손 인식 실패 시 자동 일시정지 시간 (초)
+  hud_opacity: 0.85               # HUD 불투명도 (0.0~1.0)
