@@ -378,16 +378,15 @@ class MotionController:
         text = payload.get("text", "").strip()
         if not text:
             return None
-        import subprocess
+        import subprocess, time
         try:
-            # 클립보드에 복사 후 osascript로 Cmd+V
-            # pyautogui.hotkey은 반복 사용 시 Command 키 상태가 꼬여 v만 입력되는 문제 있음
             subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
-            subprocess.run(
-                ["osascript", "-e",
-                 'tell application "System Events" to keystroke "v" using {command down}'],
-                check=True,
-            )
+            time.sleep(0.05)  # 클립보드 안착 대기
+            # keyUp으로 stuck된 Command 상태 먼저 해제 후 명시적 순서로 누름
+            pyautogui.keyUp("command")
+            pyautogui.keyDown("command")
+            pyautogui.press("v")
+            pyautogui.keyUp("command")
             log.info(f"Typed via clipboard: {text!r}")
         except Exception as e:
             log.warning(f"Type error: {e}")
