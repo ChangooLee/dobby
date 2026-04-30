@@ -2025,7 +2025,7 @@ async def claude_open_endpoint(body: dict):
         }
     project_path = str(Path(project_path).expanduser().resolve())
     log.info(f"Opening Claude Code: bin={bin_path} path={project_path}")
-    result = await open_claude_in_project(project_path, "", bin_path=bin_path)
+    result = await open_claude_in_project(project_path, "", bin_path=bin_path, project_name=project_name)
     return {
         "ok": result.get("success", False),
         "message": result.get("confirmation", ""),

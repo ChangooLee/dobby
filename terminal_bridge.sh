@@ -61,7 +61,7 @@ while true; do
 
     # claude -p 실행 — 화면 스트리밍 + 파일 캡처
     # shellcheck disable=SC2086
-    claude -p --output-format text $CONTINUE_FLAG "$prompt" 2>&1 | tee "$out_file"
+    claude -p --output-format text --dangerously-skip-permissions $CONTINUE_FLAG "$prompt" 2>&1 | tee "$out_file"
 
     # 완료 신호
     printf '\n===DOBI_DONE===\n' >> "$out_file"
