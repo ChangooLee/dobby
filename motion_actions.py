@@ -383,14 +383,16 @@ class MotionController:
         import asyncio, subprocess, time
 
         def _do_type():
-            from pynput.keyboard import Key, Controller as KbdCtrl
             subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
-            time.sleep(0.05)
-            kbd = KbdCtrl()
-            kbd.press(Key.cmd)
-            kbd.press('v')
-            kbd.release('v')
-            kbd.release(Key.cmd)
+            time.sleep(0.08)
+            # 이전 hotkey 호출에서 stuck된 modifier 키 먼저 해제
+            for mod in ("command", "shift", "ctrl", "alt"):
+                try:
+                    pyautogui.keyUp(mod)
+                except Exception:
+                    pass
+            time.sleep(0.02)
+            pyautogui.hotkey("command", "v")
 
         try:
             loop = asyncio.get_event_loop()
