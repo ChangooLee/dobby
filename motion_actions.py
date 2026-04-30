@@ -120,6 +120,12 @@ class MotionController:
             return await self._mouse_click(payload, right=True)
         elif event_type == "motion.mouse.scroll":
             return await self._mouse_scroll(payload)
+        elif event_type == "motion.mouse.button_down":
+            return await self._mouse_button_down(payload)
+        elif event_type == "motion.mouse.button_up":
+            return await self._mouse_button_up(payload)
+        elif event_type == "motion.type":
+            return await self._type_text(payload)
         elif event_type == "motion.status.hand_lost":
             log.info("Hand tracking lost — auto-pausing motion control")
             self.paused = True
@@ -354,6 +360,47 @@ class MotionController:
                 pyautogui.scroll(scroll_amount)
         except Exception as e:
             log.debug(f"Scroll error: {e}")
+        return None
+
+    async def _mouse_button_down(self, payload: dict) -> None:
+        if not _PYAUTOGUI_OK:
+            return None
+        x, y = payload.get("x"), payload.get("y")
+        try:
+            if x is not None and y is not None:
+                pyautogui.mouseDown(int(x), int(y), button="left")
+            else:
+                pyautogui.mouseDown(button="left")
+        except Exception as e:
+            log.debug(f"MouseDown error: {e}")
+        return None
+
+    async def _mouse_button_up(self, payload: dict) -> None:
+        if not _PYAUTOGUI_OK:
+            return None
+        x, y = payload.get("x"), payload.get("y")
+        try:
+            if x is not None and y is not None:
+                pyautogui.mouseUp(int(x), int(y), button="left")
+            else:
+                pyautogui.mouseUp(button="left")
+        except Exception as e:
+            log.debug(f"MouseUp error: {e}")
+        return None
+
+    async def _type_text(self, payload: dict) -> None:
+        """STT 텍스트를 현재 포커스된 입력창에 타이핑."""
+        text = payload.get("text", "").strip()
+        if not text:
+            return None
+        import subprocess
+        try:
+            # macOS: 클립보드에 복사 후 Cmd+V (한국어 포함 모든 문자 지원)
+            subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
+            pyautogui.hotkey("command", "v")
+            log.info(f"Typed via clipboard: {text!r}")
+        except Exception as e:
+            log.debug(f"Type error: {e}")
         return None
 
 

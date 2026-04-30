@@ -646,6 +646,12 @@ const CONFIG = {
   HAND_HISTORY: 20,
   HAND_LOST_PAUSE_SEC: 3.0,
 
+  // 핀치 (클릭 / 드래그 / 음성입력)
+  PINCH_DIST: 0.07,         // 엄지-검지 거리 임계값 (normalized)
+  PINCH_CLICK_MAX_MS: 350,  // 이 시간 내 떼면 클릭
+  PINCH_HOLD_MS: 600,       // 이 이상 유지하면 드래그 시작
+  PINCH_TYPE_MS: 1500,      // 이 이상 유지하면 음성 입력 모드
+
   // 마우스 제어
   MOUSE_SMOOTH: 0.35,
   MOUSE_DEAD_ZONE: 0.004,
@@ -1184,6 +1190,14 @@ async function sendAudioToSTT(blob) {
     const { text } = await resp.json();
     if (!text || !text.trim()) return;
     const raw = text.trim();
+
+    // 음성 입력 모드: STT 결과를 바로 타이핑
+    if (typeModeActive) {
+      console.log('[TYPE MODE] typing:', raw);
+      sendMotionEvent('motion.type', { text: raw });
+      return;
+    }
+
     const hasWake = /도비/.test(raw);
     if (hasWake) {
       if (isPlayingAudio) { stopAudio(); console.log('[BARGE-IN] wake word'); }
@@ -1429,6 +1443,13 @@ function drawHand(landmarks, label, W, H) {
 let pointerSmooth = null;
 const POINTER_SMOOTH_ALPHA = 0.4;
 
+// 핀치 상태
+let pinchActive = false;
+let pinchStart = 0;
+let pinchHoldFired = false;
+let pinchDragActive = false;
+let typeModeActive = false;
+
 function isPointingGesture(landmarks) {
   return (
     landmarks[LM.INDEX_TIP].y < landmarks[LM.INDEX_MCP].y &&
@@ -1443,12 +1464,14 @@ function drawIndexPointer(landmarks, W, H) {
   const x = mirrorX(tip.x, W);
   const y = toCanvasY(tip.y, H);
   const R = 12;
+  // 상태별 색상: 일반=흰, 핀치=노랑, 드래그=주황, 타입모드=초록
+  const col = typeModeActive ? '#00ff88' : pinchDragActive ? '#ff8800' : pinchActive ? '#ffee00' : '#ffffff';
   ctx.save();
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = '#ffffff';
-  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = pinchActive ? 2.5 : 1.5;
+  ctx.strokeStyle = col;
+  ctx.fillStyle = col + '22';
   ctx.shadowBlur = 16;
-  ctx.shadowColor = '#ffffff';
+  ctx.shadowColor = col;
   ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(x - R - 5, y); ctx.lineTo(x + R + 5, y);
@@ -1468,6 +1491,74 @@ function moveMouseToIndexTip(landmarks) {
     pointerSmooth.y = POINTER_SMOOTH_ALPHA * rawY + (1 - POINTER_SMOOTH_ALPHA) * pointerSmooth.y;
   }
   sendMotionEvent('motion.mouse.move', { x: Math.round(pointerSmooth.x), y: Math.round(pointerSmooth.y) });
+}
+
+function getPinchDist(landmarks) {
+  const t = landmarks[LM.THUMB_TIP], i = landmarks[LM.INDEX_TIP];
+  return Math.hypot(t.x - i.x, t.y - i.y);
+}
+
+function checkPinchGesture(landmarks, px, py) {
+  const dist = getPinchDist(landmarks);
+  const now = Date.now();
+  const pinching = dist < CONFIG.PINCH_DIST;
+
+  if (pinching) {
+    if (!pinchActive) {
+      pinchActive = true;
+      pinchStart = now;
+      pinchHoldFired = false;
+    } else {
+      const held = now - pinchStart;
+      if (!pinchHoldFired) {
+        if (held >= CONFIG.PINCH_TYPE_MS) {
+          // 1.5초 이상 — 음성 입력 모드
+          pinchHoldFired = true;
+          activateTypeMode();
+        } else if (held >= CONFIG.PINCH_HOLD_MS) {
+          // 0.6초 이상 — 드래그 시작
+          pinchHoldFired = true;
+          pinchDragActive = true;
+          sendMotionEvent('motion.mouse.button_down', { x: px, y: py });
+          showGesture('👆 드래그', 600);
+        }
+      }
+    }
+  } else {
+    if (pinchActive) {
+      const held = Date.now() - pinchStart;
+      if (pinchDragActive) {
+        pinchDragActive = false;
+        sendMotionEvent('motion.mouse.button_up', { x: px, y: py });
+        showGesture('✓ 드래그 완료', 600);
+      } else if (!pinchHoldFired && held < CONFIG.PINCH_CLICK_MAX_MS) {
+        if (typeModeActive) {
+          // 타입 모드 중 클릭 = 종료
+          deactivateTypeMode();
+        } else {
+          sendMotionEvent('motion.mouse.left_click', { x: px, y: py });
+          showGesture('클릭', 400);
+        }
+      }
+      pinchActive = false;
+      pinchHoldFired = false;
+    }
+  }
+}
+
+function activateTypeMode() {
+  typeModeActive = true;
+  wakeActive = true;
+  clearTimeout(wakeTimer);
+  showGesture('✍ 음성 입력 — 주먹으로 종료', 2500);
+  console.log('[TYPE MODE] activated');
+}
+
+function deactivateTypeMode() {
+  typeModeActive = false;
+  wakeActive = false;
+  showGesture('✍ 입력 종료', 800);
+  console.log('[TYPE MODE] deactivated');
 }
 
 // ── Cat's cradle ──────────────────────────────────────────
@@ -1611,9 +1702,21 @@ function onHandsResults(results) {
       }
     }
     if (rightHandLandmarks && isPointingGesture(rightHandLandmarks)) {
+      moveMouseToIndexTip(rightHandLandmarks); // pointerSmooth 먼저 업데이트
       drawIndexPointer(rightHandLandmarks, W, H);
-      moveMouseToIndexTip(rightHandLandmarks);
+      if (pointerSmooth) {
+        checkPinchGesture(rightHandLandmarks, Math.round(pointerSmooth.x), Math.round(pointerSmooth.y));
+      }
     } else {
+      if (pinchActive || pinchDragActive) {
+        // 포인팅 제스처 해제 → 핀치 강제 취소
+        if (pinchDragActive) {
+          pinchDragActive = false;
+          sendMotionEvent('motion.mouse.button_up', {});
+        }
+        pinchActive = false;
+        pinchHoldFired = false;
+      }
       pointerSmooth = null;
     }
   }
@@ -1665,9 +1768,13 @@ function checkFistGesture(handMap) {
     if (!fistHoldStart) { fistHoldStart = Date.now(); return; }
     if (Date.now() - fistHoldStart >= FIST_HOLD_MS) {
       fistTriggered = true; fistHoldStart = 0;
-      deactivateWake();
-      showGesture('✊ 인식 중단', 1200);
-      console.log('[GESTURE] fist — wake deactivated');
+      if (typeModeActive) {
+        deactivateTypeMode();
+      } else {
+        deactivateWake();
+        showGesture('✊ 인식 중단', 1200);
+      }
+      console.log('[GESTURE] fist — wake/type deactivated');
     }
   } else {
     fistHoldStart = 0;
