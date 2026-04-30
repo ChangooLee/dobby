@@ -94,10 +94,18 @@ async def open_session(project_name: str, project_dir: str) -> bool:
         log.error(f"tmux new-session failed: {err}")
         return False
 
-    # -c = continue most recent session (same as --resume but no picker)
+    # Try -c (continue) first; fall back to plain claude if no prior session exists
     claude_cmd = f"{claude_bin} -c --dangerously-skip-permissions"
     await _tmux("send-keys", "-t", sname, claude_cmd, "Enter")
     log.info(f"[{project_name}] tmux session '{sname}': {claude_cmd}")
+
+    # Detect "No conversation found" and retry without -c
+    await asyncio.sleep(3.0)
+    out, _, _ = await _tmux("capture-pane", "-t", sname, "-p")
+    if "No conversation found" in out:
+        log.info(f"[{project_name}] no prior session — starting fresh claude")
+        await _tmux("send-keys", "-t", sname, f"{claude_bin} --dangerously-skip-permissions", "Enter")
+
     return True
 
 
@@ -181,12 +189,13 @@ async def send_and_capture(
     await asyncio.sleep(3.0)  # give Claude Code time to start processing
 
     got_response = False
+    got_final_marker = False
     stable_done_count = 0
+    _FINAL_RE = re.compile(r"✻\s+(Worked|Cogitated|Churned|Misted|Inferred|Crafted|Thought)\s+for")
 
     while loop.time() - start < timeout:
         await asyncio.sleep(2.0)
-        # Use scrollback to see response lines
-        out, _, rc = await _tmux("capture-pane", "-t", sname, "-p", "-S", "-100")
+        out, _, rc = await _tmux("capture-pane", "-t", sname, "-p", "-S", "-150")
         if rc != 0:
             break
         visible = ANSI_RE.sub("", out)
@@ -199,14 +208,21 @@ async def send_and_capture(
                 log.info(f"[{project_name}] response started")
             continue
 
-        # Phase 2: once we have a response, check for empty input prompt
-        # Empty input = a line that is exactly '❯' followed only by whitespace/nbsp
-        empty_lines = [l for l in lines if l.strip() in ("❯\xa0", "❯ ", "❯", "❯ ")]
+        # Phase 2: wait for final completion marker (all tool calls done)
+        # "✳ Worked/Cogitated for Xs" only appears when the FULL response is complete,
+        # unlike ❯ which flickers between sub-steps causing premature done detection.
+        if not got_final_marker:
+            if any(_FINAL_RE.search(l) for l in lines):
+                got_final_marker = True
+                log.info(f"[{project_name}] final marker seen")
+            continue
+
+        # Phase 3: confirm empty input prompt (Claude idle, waiting)
+        empty_lines = [l for l in lines if l.strip() in ("❯ ", "❯ ", "❯", "❯ ")]
         if empty_lines:
-            # Make sure our prompt text is gone from input (not still processing)
             our_text_in_input = any(
                 prompt[:20].lower() in l.lower()
-                for l in lines[-5:]  # only check bottom area
+                for l in lines[-5:]
             )
             if not our_text_in_input:
                 stable_done_count += 1

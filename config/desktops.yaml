@@ -35,6 +35,12 @@ desktops:
     description: "sourceport.ai 프로젝트"
 
   5:
+    name: "mcp-kr-legislation"
+    project_path: "~/Workspace/mcp-kr-legislation"
+    role: development_project
+    description: "MCP 한국 법령 프로젝트"
+
+  6:
     name: "기타"
     project_path: "~/Workspace"
     role: misc
