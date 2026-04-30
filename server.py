@@ -1227,6 +1227,7 @@ async def _execute_prompt_project(project_name: str, prompt: str, work_session: 
                     else:
                         await ws.send_json({"type": "text", "text": msg})
                         log.info(f"Dispatch text fallback sent for {project_name}")
+                    await ws.send_json({"type": "status", "state": "idle"})
                 except Exception as e:
                     log.error(f"Dispatch audio send failed: {e}")
 
@@ -3145,7 +3146,7 @@ async def voice_handler(ws: WebSocket):
                     await ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": response_text})
                 else:
                     await ws.send_json({"type": "text", "text": response_text})
-                    await ws.send_json({"type": "status", "state": "idle"})
+                await ws.send_json({"type": "status", "state": "idle"})
                 log.info(f"DOBBY: {response_text}")
                 last_dobby_response = response_text
 
