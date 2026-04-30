@@ -2025,7 +2025,15 @@ async def claude_open_endpoint(body: dict):
         }
     project_path = str(Path(project_path).expanduser().resolve())
     log.info(f"Opening Claude Code: bin={bin_path} path={project_path}")
-    result = await open_claude_in_project(project_path, "", bin_path=bin_path, project_name=project_name)
+    desktop_result = desktop_manager.get_project_by_name(project_name or "")
+    desktop_idx = desktop_result[0] if desktop_result else None
+    result = await open_claude_in_project(
+        project_path, "",
+        bin_path=bin_path,
+        project_name=project_name,
+        desktop_index=desktop_idx,
+        desktop_manager=desktop_manager,
+    )
     return {
         "ok": result.get("success", False),
         "message": result.get("confirmation", ""),
@@ -3039,16 +3047,20 @@ async def voice_handler(ws: WebSocket):
                                 elif embedded_action["action"] == "open_claude":
                                     proj_name = embedded_action.get("target", "").strip()
                                     proj_dir = _find_project_dir(proj_name)
-                                    async def _do_open_claude(_dir=proj_dir, _name=proj_name, _ws=ws):
+                                    # resolve desktop_index before closure
+                                    _desktop_result = desktop_manager.get_project_by_name(proj_name)
+                                    _desktop_idx = _desktop_result[0] if _desktop_result else None
+                                    async def _do_open_claude(_dir=proj_dir, _name=proj_name, _didx=_desktop_idx, _ws=ws):
                                         if not _dir:
                                             msg = f"{_name} 프로젝트를 찾지 못했습니다, 주인님."
                                         else:
-                                            # 프로젝트 데스크톱으로 먼저 이동
-                                            switched = await desktop_manager.switch_to_project(_name)
-                                            if switched:
-                                                await asyncio.sleep(0.6)  # Space 전환 애니메이션 대기
-                                            # terminal_bridge.sh 실행 + 세션 등록
-                                            result = await open_claude_in_project(_dir, "", project_name=_name)
+                                            # open_claude_in_project가 Space 전환까지 담당
+                                            result = await open_claude_in_project(
+                                                _dir, "",
+                                                project_name=_name,
+                                                desktop_index=_didx,
+                                                desktop_manager=desktop_manager,
+                                            )
                                             await _proj_sessions.open_session(_name, _dir)
                                             msg = result.get("confirmation", f"{_name} Claude Code를 열었습니다, 주인님.")
                                         audio = await synthesize_speech(msg)

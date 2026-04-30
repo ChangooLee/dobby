@@ -14,6 +14,25 @@ log()  { echo -e "${GREEN}[DOBBY]${NC} $*"; }
 warn() { echo -e "${YELLOW}[DOBBY]${NC} $*"; }
 err()  { echo -e "${RED}[DOBBY]${NC} $*"; }
 
+# ── 0. yabai (Space 전환) ─────────────────────────────────────
+YABAI_BIN="$(which yabai 2>/dev/null || echo /opt/homebrew/bin/yabai)"
+if [ -x "$YABAI_BIN" ]; then
+  if ! pgrep -x yabai &>/dev/null; then
+    log "yabai 시작..."
+    nohup "$YABAI_BIN" > /tmp/yabai.log 2>&1 &
+    sleep 1
+    if pgrep -x yabai &>/dev/null; then
+      log "yabai 기동 완료"
+    else
+      warn "yabai 기동 실패 — Space 전환이 제한될 수 있습니다. 로그: tail -f /tmp/yabai.log"
+    fi
+  else
+    warn "yabai 이미 실행 중"
+  fi
+else
+  warn "yabai 없음 — brew install koekeishiya/formulae/yabai 로 설치하세요"
+fi
+
 # ── 1. Qwen3 TTS 서버 ────────────────────────────────────────
 if lsof -i :8000 -sTCP:LISTEN -t &>/dev/null; then
   warn "TTS 서버 이미 실행 중 (port 8000)"

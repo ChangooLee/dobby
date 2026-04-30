@@ -164,12 +164,20 @@ async def open_chrome(url: str) -> dict:
     return await open_browser(url, "chrome")
 
 
-async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = None, project_name: str = None) -> dict:
-    """Open Claude Code in a tmux session displayed in iTerm2 (or Terminal.app).
+async def open_claude_in_project(
+    project_dir: str,
+    prompt: str,
+    bin_path: str = None,
+    project_name: str = None,
+    desktop_index: int = None,
+    desktop_manager=None,
+) -> dict:
+    """Switch to the project's designated Space, then open Claude Code in iTerm2.
 
-    Creates a named tmux session 'dobby_<project>' running
-    'claude --resume --dangerously-skip-permissions', then attaches it
-    in iTerm2 so the user sees the full interactive TUI.
+    Flow:
+      1. yabai: switch to desktop_index (if provided) — exact, no drift
+      2. tmux: create/reuse named session 'dobby_<project>'
+      3. iTerm2: open window attached to that tmux session (opens on current Space)
     """
     import tmux_session as _tmux
     from pathlib import Path as _Path
@@ -178,6 +186,13 @@ async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = 
     if not project_name:
         project_name = _Path(project_dir).name
 
+    # Step 1: switch Space first so the iTerm2 window opens on the right desktop
+    if desktop_index and desktop_manager:
+        switched = await desktop_manager.switch_to(desktop_index)
+        if not switched:
+            log.warning(f"Space {desktop_index} switch failed, continuing anyway")
+
+    # Step 2: tmux session (background, survives iTerm2 close)
     ok = await _tmux.open_session(project_name, project_dir)
     if not ok:
         return {
@@ -185,14 +200,13 @@ async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = 
             "confirmation": "tmux 세션 시작에 실패했습니다, 주인님. claude가 설치되어 있는지 확인해 주세요.",
         }
 
+    # Step 3: attach in iTerm2 on the now-active Space
     await _tmux.attach_in_terminal(project_name)
 
-    proj_key = project_name.lower().strip().replace(" ", "_").replace("-", "_")
-    log.info(f"Opened Claude Code for '{proj_key}' in tmux session")
-
+    log.info(f"Opened Claude Code for '{project_name}' on Space {desktop_index}")
     return {
         "success": True,
-        "confirmation": f"{project_name} Claude Code를 열었습니다, 주인님.",
+        "confirmation": f"{project_name} Claude Code를 {f'{desktop_index}번 데스크톱에 ' if desktop_index else ''}열었습니다, 주인님.",
     }
 
 
@@ -344,16 +358,13 @@ async def setup_all_desktops(desktop_manager, proj_sessions) -> str:
 
         log.info(f"[setup_all] 데스크톱 {idx} ({name}) 설정 중...")
 
-        # 해당 데스크톱으로 이동
-        if idx != desktop_manager.active_index:
-            switched = await desktop_manager.switch_to(idx)
-            if switched:
-                await asyncio.sleep(0.8)  # Space 전환 애니메이션
-            else:
-                log.warning(f"[setup_all] 데스크톱 {idx} 전환 실패")
-
-        # Terminal + terminal_bridge.sh 열기
-        result = await open_claude_in_project(proj_dir, "", project_name=name)
+        # open_claude_in_project가 Space 전환 + iTerm2 열기를 모두 처리
+        result = await open_claude_in_project(
+            proj_dir, "",
+            project_name=name,
+            desktop_index=idx,
+            desktop_manager=desktop_manager,
+        )
         if result.get("success"):
             await proj_sessions.open_session(name, proj_dir)
             opened.append(name)

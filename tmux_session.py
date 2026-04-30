@@ -116,14 +116,15 @@ async def attach_in_terminal(project_name: str) -> bool:
     sname = session_name(project_name)
     attach_cmd = f"tmux attach -t {sname}"
 
-    # iTerm2 (preferred — supports native tmux integration)
+    # iTerm2: create window BEFORE activate so it opens on the currently active
+    # Space (set by yabai), not on whichever Space iTerm2 already has focus on.
     iterm_script = f'''
 tell application "iTerm"
-    activate
     set newWindow to (create window with default profile)
     tell current session of newWindow
         write text "{attach_cmd}"
     end tell
+    activate
 end tell
 '''
     proc = await _asyncio.create_subprocess_exec(
