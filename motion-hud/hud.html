@@ -705,6 +705,7 @@ const DROPOUT_TOLERANCE = 3; // ignore up to 3 consecutive frames with 0 hands
 let fistHoldStart = 0;
 const FIST_HOLD_MS = 600; // hold fist this long to trigger
 let fistTriggered = false; // prevent re-trigger until fist released
+let typeModeActivatedAt = 0; // type mode 활성화 시각 — fist 오인식 방지용
 
 // Cat's cradle
 const tipSmooth = [
@@ -1512,6 +1513,7 @@ function checkPinchGesture(landmarks, px, py) {
       pinchActive = true;
       pinchStart = now;
       pinchTypeFired = false;
+      console.log('[PINCH] start dist=' + dist.toFixed(3) + ' px=' + px + ' py=' + py);
     } else if (!pinchTypeFired && now - pinchStart >= CONFIG.PINCH_TYPE_MS) {
       pinchTypeFired = true;
       activateTypeMode();
@@ -1523,6 +1525,7 @@ function checkPinchGesture(landmarks, px, py) {
         if (typeModeActive) {
           deactivateTypeMode();
         } else {
+          console.log('[PINCH] click held=' + held + 'ms px=' + px + ' py=' + py);
           sendMotionEvent('motion.mouse.left_click', { x: px, y: py });
           showGesture('클릭', 400);
         }
@@ -1535,6 +1538,7 @@ function checkPinchGesture(landmarks, px, py) {
 
 function activateTypeMode() {
   typeModeActive = true;
+  typeModeActivatedAt = Date.now();
   wakeActive = true;
   clearTimeout(wakeTimer);
   showGesture('✍ 음성 입력 — 주먹으로 종료', 2500);
@@ -1732,6 +1736,8 @@ function isOpenHandGesture(landmarks) {
 }
 
 function checkFistGesture(handMap) {
+  // 핀치 중에는 fist 감지 안함 — 핀치 자세(검지 굽힘)가 주먹으로 오인식됨
+  if (pinchActive) { fistHoldStart = 0; fistTriggered = false; return; }
   const hand = Object.values(handMap)[0];
   if (!hand) { fistHoldStart = 0; fistTriggered = false; return; }
 
@@ -1752,6 +1758,8 @@ function checkFistGesture(handMap) {
     if (Date.now() - fistHoldStart >= FIST_HOLD_MS) {
       fistTriggered = true; fistHoldStart = 0;
       if (typeModeActive) {
+        // type mode 활성화 직후 1200ms 내에는 fist로 종료 불가 (핀치 해제 후 손 정착 시간)
+        if (Date.now() - typeModeActivatedAt < 1200) return;
         deactivateTypeMode();
       } else {
         deactivateWake();
