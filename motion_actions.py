@@ -19,7 +19,7 @@ from typing import Optional
 log = logging.getLogger("dobby.motion")
 
 # motion_control_enabled 기본값 — env에서 읽기
-MOTION_CONTROL_ENABLED_DEFAULT = os.getenv("MOTION_CONTROL_ENABLED", "false").lower() == "true"
+MOTION_CONTROL_ENABLED_DEFAULT = os.getenv("MOTION_CONTROL_ENABLED", "true").lower() == "true"
 
 # pyautogui for mouse control
 try:
@@ -131,7 +131,9 @@ class MotionController:
 
         return None
 
-    async def _enable(self) -> str:
+    async def _enable(self) -> Optional[str]:
+        if self.enabled and not self.paused:
+            return None  # 이미 활성화 — WS 재연결 등으로 중복 요청 시 TTS 없음
         self.enabled = True
         self.paused = False
         log.info("Motion control enabled")
