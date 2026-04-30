@@ -379,14 +379,16 @@ class MotionController:
         if not text:
             return None
         import subprocess, time
+        from pynput.keyboard import Key, Controller as KbdCtrl
         try:
             subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
-            time.sleep(0.05)  # 클립보드 안착 대기
-            # keyUp으로 stuck된 Command 상태 먼저 해제 후 명시적 순서로 누름
-            pyautogui.keyUp("command")
-            pyautogui.keyDown("command")
-            pyautogui.press("v")
-            pyautogui.keyUp("command")
+            time.sleep(0.05)
+            # 매번 새 Controller 인스턴스 — 누적된 modifier 상태 오염 없음
+            kbd = KbdCtrl()
+            kbd.press(Key.cmd)
+            kbd.press('v')
+            kbd.release('v')
+            kbd.release(Key.cmd)
             log.info(f"Typed via clipboard: {text!r}")
         except Exception as e:
             log.warning(f"Type error: {e}")
