@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: 'unsafe-inline' 'unsafe-eval' data: blob: wss: ws:">
-<title>J.A.R.V.I.S</title>
+<title>DOBBY</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -18,14 +18,14 @@ html, body {
 
 #hud-container {
   width: 100%; height: 100%;
-  background: rgba(2, 8, 20, 0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(0, 212, 255, 0.25);
+  background: transparent;
+  border: 1px solid rgba(0, 212, 255, 0.6);
+  box-shadow: inset 0 0 12px rgba(0,212,255,0.08), 0 0 8px rgba(0,212,255,0.15);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  box-sizing: border-box;
 }
 
 /* Side accent bars */
@@ -47,14 +47,14 @@ html, body {
   background: linear-gradient(to bottom, transparent, #00d4ff 30%, #00d4ff 70%, transparent);
 }
 
-/* ── Camera fills entire window ── */
+/* ── Camera hidden — motion only, not displayed ── */
 #camera-video {
   position: absolute;
   inset: 0;
   width: 100%; height: 100%;
   object-fit: cover;
   transform: scaleX(-1);
-  opacity: 0.08;
+  display: none;
 }
 
 /* ── Hands/cat's cradle canvas fills entire window ── */
@@ -65,7 +65,7 @@ html, body {
   z-index: 2;
 }
 
-/* ── Top status bar (overlay) ── */
+/* ── Top status bar ── */
 #status-bar {
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -74,36 +74,43 @@ html, body {
   align-items: center;
   padding: 0 16px;
   gap: 18px;
-  background: rgba(2, 8, 20, 0.82);
-  border-bottom: 1px solid rgba(0, 212, 255, 0.22);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  font-size: 10px;
+  background: rgba(0, 8, 20, 0.82);
+  border-bottom: 2px solid rgba(0, 212, 255, 0.7);
+  font-size: 12px;
   letter-spacing: 0.6px;
   z-index: 20;
+  cursor: default;
   -webkit-app-region: drag;
+}
+#status-bar * {
+  cursor: default;
+}
+#status-bar button, #status-bar [role="button"] {
+  cursor: pointer;
 }
 
 #logo {
   color: #00d4ff;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 2px;
-  text-shadow: 0 0 12px #00d4ff;
+  letter-spacing: 3px;
+  text-shadow: 0 0 14px #00d4ff, 0 0 4px rgba(0,0,0,0.9);
   -webkit-app-region: no-drag;
 }
 
 #clock {
-  color: rgba(0, 212, 255, 0.7);
-  font-size: 11px;
+  color: #00d4ff;
+  font-size: 13px;
   min-width: 72px;
   letter-spacing: 1px;
+  text-shadow: 0 0 8px rgba(0,0,0,0.9);
 }
 
 #desktop-name {
-  color: rgba(255, 220, 80, 0.65);
-  font-size: 10px;
+  color: rgba(255, 220, 80, 0.9);
+  font-size: 12px;
   letter-spacing: 0.8px;
+  text-shadow: 0 0 6px rgba(0,0,0,0.9);
 }
 
 #voice-state {
@@ -111,21 +118,22 @@ html, body {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 1.5px;
-  color: rgba(0, 212, 255, 0.6);
+  color: #00d4ff;
+  text-shadow: 0 0 6px rgba(0,0,0,0.9);
 }
 
 .voice-dot {
-  width: 8px; height: 8px;
+  width: 9px; height: 9px;
   border-radius: 50%;
   background: #333;
   transition: background 0.2s, box-shadow 0.2s;
 }
-.voice-dot.idle      { background: rgba(0, 212, 255, 0.3); }
-.voice-dot.listening { background: #00ff88; box-shadow: 0 0 10px #00ff88; animation: pulse-green 1.5s infinite; }
-.voice-dot.thinking  { background: #ff6600; box-shadow: 0 0 10px #ff6600; animation: pulse-orange 0.8s infinite; }
-.voice-dot.speaking  { background: #0066ff; box-shadow: 0 0 10px #0066ff; animation: pulse-blue 0.5s infinite; }
+.voice-dot.idle      { background: rgba(0, 212, 255, 0.4); }
+.voice-dot.listening { background: #00ff88; box-shadow: 0 0 12px #00ff88; animation: pulse-green 1.5s infinite; }
+.voice-dot.thinking  { background: #ff6600; box-shadow: 0 0 12px #ff6600; animation: pulse-orange 0.8s infinite; }
+.voice-dot.speaking  { background: #0088ff; box-shadow: 0 0 12px #0088ff; animation: pulse-blue 0.5s infinite; }
 
 @keyframes pulse-green  { 0%,100%{opacity:1} 50%{opacity:0.45} }
 @keyframes pulse-orange { 0%,100%{opacity:1} 50%{opacity:0.55} }
@@ -134,47 +142,18 @@ html, body {
 #hud-close {
   -webkit-app-region: no-drag;
   background: none;
-  border: 1px solid rgba(0, 212, 255, 0.2);
-  color: rgba(0, 212, 255, 0.45);
+  border: 1px solid rgba(0, 212, 255, 0.5);
+  color: rgba(0, 212, 255, 0.7);
   border-radius: 4px;
-  padding: 2px 7px;
-  font-size: 9px;
+  padding: 2px 8px;
+  font-size: 10px;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.15s;
 }
-#hud-close:hover { background: rgba(255,50,50,0.15); border-color: rgba(255,50,50,0.4); color: #ff4444; }
+#hud-close:hover { background: rgba(255,50,50,0.15); border-color: rgba(255,50,50,0.6); color: #ff4444; }
 
-/* ── Left info panel (floating overlay) ── */
-#left-panel {
-  position: absolute;
-  top: 40px;
-  left: 0;
-  width: 210px;
-  bottom: 72px;
-  background: rgba(2, 8, 20, 0.62);
-  border-right: 1px solid rgba(0, 212, 255, 0.12);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow: hidden;
-  z-index: 10;
-}
-
-.panel-section { flex: 1; overflow: hidden; }
-
-.section-title {
-  font-size: 8px;
-  letter-spacing: 2px;
-  color: rgba(0, 212, 255, 0.4);
-  margin-bottom: 6px;
-  border-bottom: 1px solid rgba(0, 212, 255, 0.1);
-  padding-bottom: 3px;
-}
-
+/* ── info-item (legacy, kept for cal-items compatibility) ── */
 .info-item {
   font-size: 9px;
   color: rgba(0, 212, 255, 0.7);
@@ -240,20 +219,50 @@ html, body {
 #calibrate-crosshair::after  { content:''; position:absolute; height:1px; width:100%; top:50%; transform:translateY(-50%); background:#00d4ff; }
 #calibrate-countdown { font-size: 28px; font-weight: bold; text-shadow: 0 0 20px #00d4ff; }
 
+/* ── Wake indicator (채팅창 바로 위) ── */
+#wake-indicator {
+  position: absolute;
+  bottom: 130px;
+  left: 0; right: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 25;
+  transition: opacity 0.3s;
+}
+#wake-indicator.active {
+  opacity: 1;
+}
+#wake-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #00ff88;
+  box-shadow: 0 0 10px #00ff88, 0 0 20px rgba(0,255,136,0.5);
+  animation: pulse-green 1.2s infinite;
+}
+#wake-label {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: #00ff88;
+  text-shadow: 0 0 12px #00ff88, 0 0 4px rgba(0,0,0,0.9);
+}
+
 /* ── Transcript bar (bottom overlay) ── */
 #transcript-bar {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  height: 72px;
-  background: rgba(2, 8, 20, 0.78);
-  border-top: 1px solid rgba(0, 212, 255, 0.15);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  padding: 6px 16px 6px 220px;
+  min-height: 130px;
+  background: transparent;
+  border-top: none;
+  padding: 10px 165px 10px 220px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  gap: 2px;
+  gap: 3px;
   overflow: hidden;
   z-index: 20;
 }
@@ -261,29 +270,41 @@ html, body {
 #transcript-log {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   overflow: hidden;
 }
 
 .transcript-entry {
-  font-size: 10px;
+  font-size: 15px;
+  font-weight: 600;
   letter-spacing: 0.3px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 1.4;
+  line-height: 1.6;
 }
-.transcript-entry.user { color: #00d4ff; }
-.transcript-entry.dobi { color: #00ff88; }
-.transcript-entry .entry-prefix { opacity: 0.45; margin-right: 5px; }
+.transcript-entry.user {
+  color: #ffffff;
+  text-shadow: 0 0 16px #00d4ff, 0 0 8px #00d4ff, 1px 1px 0 rgba(0,0,0,1), -1px -1px 0 rgba(0,0,0,1);
+}
+.transcript-entry.dobi {
+  color: #ffffff;
+  text-shadow: 0 0 16px #00ff88, 0 0 8px #00ff88, 1px 1px 0 rgba(0,0,0,1), -1px -1px 0 rgba(0,0,0,1);
+}
+.transcript-entry .entry-prefix {
+  opacity: 0.65;
+  margin-right: 8px;
+  font-size: 12px;
+}
 
 /* ── Gesture guide (bottom-right) ── */
 #gesture-guide {
   position: absolute;
-  bottom: 6px;
+  bottom: 8px;
   right: 16px;
-  font-size: 8px;
-  color: rgba(0, 212, 255, 0.28);
+  font-size: 10px;
+  color: rgba(0, 212, 255, 0.7);
+  text-shadow: 1px 1px 3px rgba(0,0,0,1);
   letter-spacing: 0.5px;
   z-index: 21;
   pointer-events: none;
@@ -292,30 +313,31 @@ html, body {
 /* ── Corner brackets ── */
 .corner-bracket {
   position: absolute;
-  width: 14px; height: 14px;
-  border-color: rgba(0, 212, 255, 0.35);
+  width: 18px; height: 18px;
+  border-color: rgba(0, 212, 255, 0.75);
   border-style: solid;
   z-index: 15;
   pointer-events: none;
+  box-shadow: 0 0 6px rgba(0,212,255,0.3);
 }
-.cb-tl { top: 44px; left: 4px; border-width: 1px 0 0 1px; }
-.cb-tr { top: 44px; right: 4px; border-width: 1px 1px 0 0; }
-.cb-bl { bottom: 76px; left: 4px; border-width: 0 0 1px 1px; }
-.cb-br { bottom: 76px; right: 4px; border-width: 0 1px 1px 0; }
+.cb-tl { top: 44px; left: 4px; border-width: 2px 0 0 2px; }
+.cb-tr { top: 44px; right: 4px; border-width: 2px 2px 0 0; }
+.cb-bl { bottom: 134px; left: 4px; border-width: 0 0 2px 2px; }
+.cb-br { bottom: 134px; right: 4px; border-width: 0 2px 2px 0; }
 
 /* ── Side accent bars ── */
 .side-bar {
   position: absolute;
-  top: 40px; bottom: 72px;
+  top: 40px; bottom: 130px;
   width: 2px;
   z-index: 5;
   pointer-events: none;
-  background: linear-gradient(to bottom, transparent, rgba(0,212,255,0.4) 30%, rgba(0,212,255,0.4) 70%, transparent);
+  background: linear-gradient(to bottom, transparent, rgba(0,212,255,0.65) 25%, rgba(0,212,255,0.65) 75%, transparent);
 }
 .side-bar-l { left: 0; }
 .side-bar-r { right: 0; }
 
-/* ── Scan lines ── */
+/* ── Scan lines (very subtle) ── */
 #scanlines {
   position: absolute;
   inset: 0;
@@ -323,13 +345,139 @@ html, body {
   z-index: 1;
   background: repeating-linear-gradient(
     0deg, transparent, transparent 3px,
-    rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px
+    rgba(0,0,0,0.02) 3px, rgba(0,0,0,0.02) 4px
   );
-  animation: flicker 10s infinite;
 }
 @keyframes flicker {
   0%,100%{opacity:1} 93%{opacity:1} 94%{opacity:0.9} 95%{opacity:1} 97%{opacity:0.95} 98%{opacity:1}
 }
+
+/* ── Left Panel ── */
+#cal-panel {
+  position: absolute;
+  top: 40px;
+  bottom: 130px;
+  left: 0;
+  width: 230px;
+  background: transparent;
+  border-right: none;
+  padding: 0;
+  z-index: 40;
+  pointer-events: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.hud-section {
+  padding: 10px 12px;
+  flex-shrink: 0;
+}
+.hud-section-grow { flex: 1; overflow: hidden; }
+.hud-section-title {
+  font-size: 10px;
+  letter-spacing: 2.5px;
+  color: #00d4ff;
+  margin-bottom: 7px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(0,212,255,0.55);
+  text-shadow: 0 0 12px #00d4ff, 0 0 4px rgba(0,0,0,1);
+}
+.hud-kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 4px 0;
+  gap: 6px;
+}
+.hud-path { flex-wrap: nowrap; }
+.hud-k {
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  color: rgba(0,212,255,0.75);
+  flex-shrink: 0;
+  text-shadow: 1px 1px 4px rgba(0,0,0,1), 0 0 8px rgba(0,0,0,0.9);
+}
+.hud-v {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+  text-shadow: 0 0 14px #00d4ff, 1px 1px 4px rgba(0,0,0,1);
+}
+.cal-item {
+  font-size: 12px;
+  color: #ffffff;
+  padding: 5px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.5;
+  text-shadow: 0 0 10px #00d4ff, 1px 1px 4px rgba(0,0,0,1);
+}
+.cal-item .ct { color: rgba(0,212,255,0.7); margin-right: 6px; font-size: 11px; }
+.cal-empty { font-size: 11px; color: rgba(0,212,255,0.5); font-style: italic; margin-top: 4px; }
+
+/* ── Right Panel ── */
+#sys-panel {
+  position: absolute;
+  top: 40px;
+  bottom: 130px;
+  right: 0;
+  width: 170px;
+  background: transparent;
+  border-left: none;
+  padding: 0;
+  z-index: 40;
+  pointer-events: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.rp-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow: 0 0 14px #00d4ff, 1px 1px 4px rgba(0,0,0,1);
+}
+.sys-bar-bg { width: 100%; height: 3px; background: rgba(0,212,255,0.15); border-radius: 2px; overflow: hidden; margin-top: 3px; }
+.sys-bar-fill { height: 100%; background: rgba(0,212,255,0.7); border-radius: 2px; width: 0; transition: width 0.8s; }
+
+/* ── Debug Overlay ── */
+#debug-overlay {
+  display: none;
+  position: absolute;
+  top: 38px;
+  right: 145px;
+  width: 220px;
+  background: rgba(2,8,20,0.92);
+  border: 1px solid rgba(0,212,255,0.3);
+  border-radius: 4px;
+  padding: 8px 10px;
+  z-index: 200;
+  pointer-events: none;
+  font-size: 8px;
+}
+.dbg-title {
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: rgba(0,212,255,0.5);
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(0,212,255,0.15);
+  padding-bottom: 3px;
+}
+.dbg-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 1.5px 0;
+  border-bottom: 1px solid rgba(0,212,255,0.04);
+}
+.dbg-k { color: rgba(0,212,255,0.35); letter-spacing: 0.5px; flex-shrink: 0; }
+.dbg-v { color: rgba(0,255,136,0.7); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }
 </style>
 </head>
 <body>
@@ -359,7 +507,7 @@ html, body {
 
   <!-- Top status bar -->
   <div id="status-bar">
-    <span id="logo">◈ J.A.R.V.I.S</span>
+    <span id="logo">◈ D.O.B.B.Y</span>
     <span id="clock">00:00:00</span>
     <span id="desktop-name">—</span>
     <div id="voice-state">
@@ -369,20 +517,39 @@ html, body {
     <button id="hud-close">✕</button>
   </div>
 
-  <!-- Left info panel (floating) -->
-  <div id="left-panel">
-    <div class="panel-section">
-      <div class="section-title">◈ TODAY</div>
-      <div id="calendar-items"><div class="info-item-empty">로딩 중…</div></div>
+  <!-- 좌측 패널: JARVIS-like 정보 -->
+  <div id="cal-panel">
+    <!-- WORKSPACE -->
+    <div class="hud-section">
+      <div class="hud-section-title">◈ WORKSPACE</div>
+      <div class="hud-kv"><span class="hud-k">SPACE</span><span class="hud-v" id="lp-desktop">1</span></div>
+      <div class="hud-kv"><span class="hud-k">NAME</span><span class="hud-v" id="lp-dname">—</span></div>
+      <div class="hud-kv"><span class="hud-k">PROJECT</span><span class="hud-v" id="lp-proj">—</span></div>
+      <div class="hud-kv hud-path"><span class="hud-k">PATH</span><span class="hud-v" id="lp-path">—</span></div>
     </div>
-    <div class="panel-section">
-      <div class="section-title">◈ TASKS</div>
-      <div id="task-items"><div class="info-item-empty">없음</div></div>
+    <!-- DOBBY STATUS -->
+    <div class="hud-section">
+      <div class="hud-section-title">◈ STATUS</div>
+      <div class="hud-kv"><span class="hud-k">VOICE</span><span class="hud-v" id="lp-voice">IDLE</span></div>
+      <div class="hud-kv"><span class="hud-k">MOTION</span><span class="hud-v" id="lp-motion">OFF</span></div>
+      <div class="hud-kv"><span class="hud-k">STT</span><span class="hud-v" id="lp-stt">대기</span></div>
+      <div class="hud-kv"><span class="hud-k">CLAUDE</span><span class="hud-v" id="lp-claude">확인 중</span></div>
+    </div>
+    <!-- SCHEDULE -->
+    <div class="hud-section hud-section-grow">
+      <div class="hud-section-title">◈ TODAY</div>
+      <div id="cal-items"><div class="cal-empty">로딩 중…</div></div>
     </div>
   </div>
 
   <!-- Gesture badge (center) -->
   <div id="gesture-badge"></div>
+
+  <!-- Debug Overlay (D 키로 토글) -->
+  <div id="debug-overlay">
+    <div class="dbg-title">◈ DEBUG [D키 닫기]</div>
+    <div id="debug-panel-content"></div>
+  </div>
 
   <!-- Calibration overlay -->
   <div id="calibrate-overlay">
@@ -391,13 +558,62 @@ html, body {
     <div id="calibrate-countdown">3</div>
   </div>
 
+  <!-- Wake indicator (채팅창 바로 위) -->
+  <div id="wake-indicator">
+    <div id="wake-dot"></div>
+    <span id="wake-label">◈ D.O.B.B.Y LISTENING</span>
+  </div>
+
   <!-- Bottom transcript bar -->
   <div id="transcript-bar">
     <div id="transcript-log"></div>
   </div>
 
+  <!-- 우측 패널: 모션/제스처/액션/시스템 -->
+  <div id="sys-panel">
+    <!-- MOTION STATUS -->
+    <div class="hud-section">
+      <div class="hud-section-title">◈ MOTION</div>
+      <div class="hud-kv"><span class="hud-k">제어</span><span class="hud-v rp-val" id="rp-motion">OFF</span></div>
+      <div class="hud-kv"><span class="hud-k">손</span><span class="hud-v rp-val" id="rp-hands">0개</span></div>
+      <div class="hud-kv"><span class="hud-k">레이블</span><span class="hud-v rp-val" id="rp-hlabel">—</span></div>
+    </div>
+    <!-- GESTURE -->
+    <div class="hud-section">
+      <div class="hud-section-title">◈ GESTURE</div>
+      <div class="hud-kv"><span class="hud-k">마지막</span><span class="hud-v rp-val" id="rp-gesture">—</span></div>
+      <div class="hud-kv"><span class="hud-k">스와이프</span><span class="hud-v rp-val" id="rp-swipe">—</span></div>
+      <div class="hud-kv"><span class="hud-k">디바운스</span><span class="hud-v rp-val" id="rp-debounce">—</span></div>
+    </div>
+    <!-- ACTION -->
+    <div class="hud-section">
+      <div class="hud-section-title">◈ ACTION</div>
+      <div class="hud-kv"><span class="hud-k">이벤트</span><span class="hud-v rp-val" id="rp-event">—</span></div>
+      <div class="hud-kv"><span class="hud-k">ACK</span><span class="hud-v rp-val" id="rp-ack">—</span></div>
+    </div>
+    <!-- SYSTEM -->
+    <div class="hud-section">
+      <div class="hud-section-title">◈ SYSTEM</div>
+      <div class="hud-kv">
+        <span class="hud-k">CPU</span>
+        <span class="hud-v rp-val" id="cpu-val">--%</span>
+      </div>
+      <div class="sys-bar-bg" style="margin: 2px 0 4px"><div class="sys-bar-fill" id="cpu-bar"></div></div>
+      <div class="hud-kv">
+        <span class="hud-k">RAM</span>
+        <span class="hud-v rp-val" id="ram-val">--%</span>
+      </div>
+      <div class="sys-bar-bg" style="margin: 2px 0 4px"><div class="sys-bar-fill" id="ram-bar"></div></div>
+      <div class="hud-kv">
+        <span class="hud-k">BAT</span>
+        <span class="hud-v rp-val" id="bat-val">--%</span>
+      </div>
+      <div class="sys-bar-bg" style="margin: 2px 0"><div class="sys-bar-fill" id="bat-bar" style="background:rgba(0,255,136,0.5)"></div></div>
+    </div>
+  </div>
+
   <!-- Gesture guide -->
-  <div id="gesture-guide">✊ 인터럽트 &nbsp;|&nbsp; 🤚 승인 &nbsp;|&nbsp; ✌️ 음성토글 &nbsp;|&nbsp; 👆 포인터</div>
+  <div id="gesture-guide">← 스와이프 → 데스크톱 전환</div>
 
 </div>
 
@@ -410,28 +626,20 @@ html, body {
 
 <script type="module">
 // ============================================================
-// J.A.R.V.I.S Unified HUD — 메인 로직
+// DOBBY Unified HUD — 메인 로직
 // ============================================================
 import * as THREE from 'three';
 
 // ── 설정 상수 ──────────────────────────────────────────────
 const CONFIG = {
-  MOTION_WS_URL: 'ws://localhost:8340/ws/motion',
-  VOICE_WS_URL:  'ws://localhost:8340/ws/voice',
+  MOTION_WS_URL: 'wss://localhost:8340/ws/motion',
+  VOICE_WS_URL:  'wss://localhost:8340/ws/voice',
   WS_RECONNECT_DELAY: 3000,
 
   // 제스처 임계값
-  PINCH_THRESHOLD: 0.065,
-  SWIPE_VELOCITY: 0.7,
-  SWIPE_DISTANCE: 0.18,
-  SWIPE_DEBOUNCE_MS: 900,
-  CLICK_DEBOUNCE_MS: 500,
-  SCROLL_THROTTLE_MS: 50,
-
-  // 새 제스처 디바운스
-  FIST_DEBOUNCE_MS: 1500,
-  PALM_DEBOUNCE_MS: 2000,
-  VSIGN_DEBOUNCE_MS: 800,
+  SWIPE_VELOCITY: 0.50,
+  SWIPE_DISTANCE: 0.25,
+  SWIPE_DEBOUNCE_MS: 800,
 
   // 손 추적
   HAND_HISTORY: 20,
@@ -443,6 +651,9 @@ const CONFIG = {
 
   // HUD context 갱신 주기 (ms)
   CONTEXT_REFRESH_MS: 60000,
+
+  // 웨이크워드 활성 유지 시간 (ms)
+  WAKE_TIMEOUT_MS: 30000,
 };
 
 // ── 랜드마크 인덱스 ──────────────────────────────────────────
@@ -470,26 +681,24 @@ let motionEnabled = false;
 let motionPaused  = false;
 let cameraRunning = false;
 let handLostTimer = null;
+let mediapipeCrashCount = 0;
 
 let screenW = window.screen.width;
 let screenH = window.screen.height;
 
-const handHistory = { Left: [], Right: [] };
-let smoothX = null, smoothY = null;
+const handHistory = {};
+let lastSwipeTime = 0;
+let swipeWaitForSettle = false; // blocks detection until hand stops moving
 
-let lastSwipeTime   = 0;
-let lastClickTime   = 0;
-let lastScrollTime  = 0;
-let lastLeftClickTime  = 0;
-let lastRightClickTime = 0;
-let leftPinchActive  = false;
-let rightPinchActive = false;
-let pointerActive    = false;
+// Brief hand-dropout tolerance (frames)
+let lastHandCount = 0;
+let dropoutFrames = 0;
+const DROPOUT_TOLERANCE = 3; // ignore up to 3 consecutive frames with 0 hands
 
-// 새 제스처 디바운스
-let lastFistTime   = 0;
-let lastPalmTime   = 0;
-let lastVSignTime  = 0;
+// Fist gesture state
+let fistHoldStart = 0;
+const FIST_HOLD_MS = 600; // hold fist this long to trigger
+let fistTriggered = false; // prevent re-trigger until fist released
 
 // Cat's cradle
 const tipSmooth = [
@@ -515,7 +724,61 @@ let audioCtx = null;
 let analyser = null;
 let audioQueue = [];
 let isPlayingAudio = false;
+let currentAudioSource = null; // tracked for barge-in stop
 const MAX_TRANSCRIPT = 6;
+
+// ── Debug State ──────────────────────────────────────────────────────────────
+const dbg = {
+  show: false,
+  lastGesture: '',
+  lastSwipeDir: '',
+  lastSwipeDx: 0,
+  lastSwipeVelocity: 0,
+  lastEventSent: '',
+  lastEventTime: 0,
+  lastAck: null,
+  ackTime: 0,
+  claudeStatus: null,
+  claudeStatusTime: 0,
+};
+
+function toggleDebugOverlay() {
+  dbg.show = !dbg.show;
+  const el = document.getElementById('debug-overlay');
+  if (el) el.style.display = dbg.show ? 'block' : 'none';
+  updateDebugPanel();
+}
+
+function updateDebugPanel() {
+  if (!dbg.show) return;
+  const el = document.getElementById('debug-panel-content');
+  if (!el) return;
+  const now = Date.now();
+  const wsStatus = motionWSConnected ? '✓ 연결됨' : '✗ 끊어짐';
+  const voiceWsStatus = voiceWSConnected ? '✓ 연결됨' : '✗ 끊어짐';
+  const ackAge = dbg.ackTime ? Math.round((now - dbg.ackTime) / 1000) + 's 전' : '없음';
+  const ackStatus = dbg.lastAck ? (dbg.lastAck.ok ? `✓ ${dbg.lastAck.message || 'OK'}` : `✗ ${dbg.lastAck.message || '실패'}`) : '없음';
+  const claudeInfo = dbg.claudeStatus ? (dbg.claudeStatus.available ? `✓ ${dbg.claudeStatus.claude_bin || ''}` : `✗ 없음`) : '확인 중...';
+  const leftH = (handHistory.Left || []).length;
+  const rightH = (handHistory.Right || []).length;
+  el.innerHTML = `
+    <div class="dbg-row"><span class="dbg-k">MOTION WS</span><span class="dbg-v">${wsStatus}</span></div>
+    <div class="dbg-row"><span class="dbg-k">VOICE WS</span><span class="dbg-v">${voiceWsStatus}</span></div>
+    <div class="dbg-row"><span class="dbg-k">MOTION</span><span class="dbg-v">${motionEnabled ? (motionPaused ? '일시정지' : '활성') : '비활성'}</span></div>
+    <div class="dbg-row"><span class="dbg-k">HAND L</span><span class="dbg-v">${leftH}프레임</span></div>
+    <div class="dbg-row"><span class="dbg-k">HAND R</span><span class="dbg-v">${rightH}프레임</span></div>
+    <div class="dbg-row"><span class="dbg-k">SWIPE DIR</span><span class="dbg-v">${dbg.lastSwipeDir || '—'}</span></div>
+    <div class="dbg-row"><span class="dbg-k">SWIPE dx</span><span class="dbg-v">${dbg.lastSwipeDx.toFixed(3)}</span></div>
+    <div class="dbg-row"><span class="dbg-k">VELOCITY</span><span class="dbg-v">${dbg.lastSwipeVelocity.toFixed(2)}</span></div>
+    <div class="dbg-row"><span class="dbg-k">THRESHOLD</span><span class="dbg-v">d≥${CONFIG.SWIPE_DISTANCE} v≥${CONFIG.SWIPE_VELOCITY}</span></div>
+    <div class="dbg-row"><span class="dbg-k">LAST EVENT</span><span class="dbg-v">${dbg.lastEventSent || '—'}</span></div>
+    <div class="dbg-row"><span class="dbg-k">ACK</span><span class="dbg-v">${ackStatus}</span></div>
+    <div class="dbg-row"><span class="dbg-k">ACK AGE</span><span class="dbg-v">${ackAge}</span></div>
+    <div class="dbg-row"><span class="dbg-k">CLAUDE</span><span class="dbg-v">${claudeInfo}</span></div>
+    <div class="dbg-row"><span class="dbg-k">GESTURE</span><span class="dbg-v">${dbg.lastGesture || '—'}</span></div>
+  `;
+  updateRightPanel();
+}
 
 // ── DOM 요소 ──────────────────────────────────────────────
 const video            = document.getElementById('camera-video');
@@ -531,8 +794,7 @@ const desktopNameEl    = document.getElementById('desktop-name');
 const voiceDotEl       = document.getElementById('voice-dot');
 const voiceLabelEl     = document.getElementById('voice-label');
 const transcriptLog    = document.getElementById('transcript-log');
-const calendarItems    = document.getElementById('calendar-items');
-const taskItems        = document.getElementById('task-items');
+const calendarItems    = document.getElementById('cal-items');
 const orbCanvas        = document.getElementById('orb-canvas');
 let orb = null;
 
@@ -569,6 +831,69 @@ function setVoiceState(state) {
   voiceDotEl.className = 'voice-dot ' + state;
   voiceLabelEl.textContent = STATE_LABELS[state] || state.toUpperCase();
   if (orb) orb.setState(state);
+  updateLeftPanel();
+}
+
+// ── Left Panel Update ─────────────────────────────────────
+function updateLeftPanel() {
+  const lpVoice   = document.getElementById('lp-voice');
+  const lpMotion  = document.getElementById('lp-motion');
+  const lpStt     = document.getElementById('lp-stt');
+  const lpClaude  = document.getElementById('lp-claude');
+  const lpDesktop = document.getElementById('lp-desktop');
+  if (lpVoice)   lpVoice.textContent   = (STATE_LABELS[voiceState] || voiceState).toUpperCase();
+  if (lpMotion)  lpMotion.textContent  = !motionEnabled ? 'OFF' : motionPaused ? 'PAUSED' : 'ON';
+  if (lpStt)     lpStt.textContent     = speechEnabled ? (recognitionRunning ? '인식 중' : '대기') : '끔';
+  if (lpDesktop) lpDesktop.textContent = activeDesktop;
+  if (lpClaude) {
+    if (dbg.claudeStatus) {
+      lpClaude.textContent = dbg.claudeStatus.available ? '✓ 실행 가능' : '✗ 없음';
+      lpClaude.style.color = dbg.claudeStatus.available ? 'rgba(0,255,136,0.8)' : 'rgba(255,100,100,0.8)';
+    }
+  }
+}
+
+// ── Right Panel Update ────────────────────────────────────
+function updateRightPanel() {
+  const rpMotion   = document.getElementById('rp-motion');
+  const rpHands    = document.getElementById('rp-hands');
+  const rpHlabel   = document.getElementById('rp-hlabel');
+  const rpGesture  = document.getElementById('rp-gesture');
+  const rpSwipe    = document.getElementById('rp-swipe');
+  const rpDebounce = document.getElementById('rp-debounce');
+  const rpEvent    = document.getElementById('rp-event');
+  const rpAck      = document.getElementById('rp-ack');
+  if (rpMotion)  rpMotion.textContent  = !motionEnabled ? 'OFF' : motionPaused ? 'PAUSED' : 'ACTIVE';
+  if (rpGesture) rpGesture.textContent = dbg.lastGesture || '—';
+  if (rpSwipe)   rpSwipe.textContent   = dbg.lastSwipeDir ? `${dbg.lastSwipeDir} (${dbg.lastSwipeDx.toFixed(2)})` : '—';
+  if (rpDebounce) {
+    if (swipeWaitForSettle) {
+      const elapsed = Date.now() - lastSwipeTime;
+      rpDebounce.textContent = `정착 중 ${elapsed}ms`;
+    } else {
+      rpDebounce.textContent = '준비됨';
+    }
+  }
+  if (rpEvent) {
+    const eventShort = (dbg.lastEventSent || '').replace('motion.desktop.', '').replace('motion_control.', '') || '—';
+    rpEvent.textContent = eventShort;
+  }
+  if (rpAck && dbg.lastAck) {
+    rpAck.textContent = dbg.lastAck.ok ? '✓' : '✗';
+    rpAck.style.color = dbg.lastAck.ok ? 'rgba(0,255,136,0.8)' : 'rgba(255,100,100,0.8)';
+  }
+}
+
+// ── Claude Status Fetch ───────────────────────────────────
+async function fetchClaudeStatus() {
+  try {
+    const r = await fetch('https://localhost:8340/api/claude/status');
+    if (!r.ok) return;
+    dbg.claudeStatus = await r.json();
+    dbg.claudeStatusTime = Date.now();
+    updateLeftPanel();
+    updateRightPanel();
+  } catch {}
 }
 
 // ── Transcript log ────────────────────────────────────────
@@ -597,6 +922,15 @@ function ensureAudioCtx() {
   if (orb) orb.setAnalyser(analyser);
 }
 
+function stopAudio() {
+  if (currentAudioSource) {
+    try { currentAudioSource.stop(); } catch {}
+    currentAudioSource = null;
+  }
+  audioQueue = [];
+  isPlayingAudio = false;
+}
+
 async function playAudioChunk(base64data) {
   ensureAudioCtx();
   try {
@@ -607,6 +941,7 @@ async function playAudioChunk(base64data) {
     source.buffer = buffer;
     source.connect(analyser);
     source.onended = () => {
+      currentAudioSource = null;
       audioQueue.shift();
       if (audioQueue.length > 0) {
         playAudioChunk(audioQueue[0]);
@@ -616,9 +951,11 @@ async function playAudioChunk(base64data) {
         startRecognition();
       }
     };
+    currentAudioSource = source;
     source.start(0);
   } catch (err) {
     console.error('[HUD] Audio decode error:', err);
+    currentAudioSource = null;
     audioQueue.shift();
     if (audioQueue.length > 0) {
       playAudioChunk(audioQueue[0]);
@@ -635,7 +972,6 @@ function enqueueAudio(base64data) {
   if (!isPlayingAudio) {
     isPlayingAudio = true;
     setVoiceState('speaking');
-    stopRecognition();
     playAudioChunk(audioQueue[0]);
   }
 }
@@ -662,6 +998,12 @@ function connectMotionWS() {
     motionWS.onopen = () => {
       motionWSConnected = true;
       console.log('[HUD] Motion WS connected');
+      // 서버가 연결 직후 motion_status:disabled를 보내고 카메라를 끈 뒤에도
+      // enable을 보내고 카메라를 복구하기 위해 충분히 늦은 타이밍에 처리
+      setTimeout(() => {
+        sendMotionEvent('motion_control.enable');
+        if (!cameraRunning) startCamera();
+      }, 500);
     };
     motionWS.onmessage = (e) => {
       try { handleMotionMessage(JSON.parse(e.data)); } catch {}
@@ -670,7 +1012,11 @@ function connectMotionWS() {
       motionWSConnected = false;
       setTimeout(connectMotionWS, CONFIG.WS_RECONNECT_DELAY);
     };
-    motionWS.onerror = () => { motionWSConnected = false; };
+    motionWS.onerror = (e) => {
+      motionWSConnected = false;
+      console.warn('[HUD] Motion WS error:', e?.type);
+      setTimeout(connectMotionWS, CONFIG.WS_RECONNECT_DELAY);
+    };
   } catch {
     setTimeout(connectMotionWS, CONFIG.WS_RECONNECT_DELAY);
   }
@@ -678,7 +1024,12 @@ function connectMotionWS() {
 
 function sendMotionEvent(type, payload = {}) {
   if (!motionWSConnected || !motionWS) return;
-  try { motionWS.send(JSON.stringify({ type, payload })); } catch {}
+  try {
+    motionWS.send(JSON.stringify({ type, payload }));
+    // mouse.move는 고빈도 이벤트 — dbg만 업데이트하고 DOM 갱신은 interval에 맡김
+    dbg.lastEventSent = type;
+    dbg.lastEventTime = Date.now();
+  } catch {}
 }
 
 function handleMotionMessage(msg) {
@@ -686,20 +1037,36 @@ function handleMotionMessage(msg) {
     const state = msg.state;
     if (state === 'active') {
       motionEnabled = true; motionPaused = false;
+      swipeWaitForSettle = false;
+      for (const k of Object.keys(handHistory)) handHistory[k] = [];
       if (btnMotionToggle) { btnMotionToggle.textContent = '모션 ON'; btnMotionToggle.classList.add('active'); }
+      // 카메라가 멈춰 있으면 재시작 (서버 재연결 후 disabled → active 시나리오)
+      if (!cameraRunning) startCamera();
     } else if (state === 'paused') {
       motionPaused = true;
     } else if (state === 'disabled') {
       motionEnabled = false; motionPaused = false;
+      swipeWaitForSettle = false;
+      for (const k of Object.keys(handHistory)) handHistory[k] = [];
       if (btnMotionToggle) { btnMotionToggle.textContent = '모션 OFF'; btnMotionToggle.classList.remove('active'); }
       stopCamera();
     }
   } else if (msg.type === 'desktop_changed') {
     activeDesktop = msg.index || activeDesktop;
-    activeDesktopName = msg.name || `데스크톱 ${activeDesktop}`;
-    desktopNameEl.textContent = activeDesktopName;
+    const dname = msg.name || `SPACE ${activeDesktop}`;
+    activeDesktopName = dname;
+    desktopNameEl.textContent = dname;
+    const lpd = document.getElementById('lp-desktop');
+    const lpdn = document.getElementById('lp-dname');
+    if (lpd) lpd.textContent = activeDesktop;
+    if (lpdn) lpdn.textContent = dname;
   } else if (msg.type === 'motion_calibrate') {
     startCalibration();
+  } else if (msg.type === 'motion_ack') {
+    dbg.lastAck = msg;
+    dbg.ackTime = Date.now();
+    updateDebugPanel();
+    if (!msg.ok) showGesture(`⚠ ${msg.message || '전환 실패'}`, 2500);
   }
 }
 
@@ -715,6 +1082,7 @@ function connectVoiceWS() {
       voiceWSConnected = true;
       console.log('[HUD] Voice WS connected');
       setVoiceState('listening');
+      if (!recognition) { initRecognition(); startRecognition(); }
     };
     voiceWS.onmessage = (e) => {
       if (e.data instanceof Blob) return;
@@ -754,12 +1122,9 @@ function sendTranscript(text, isFinal) {
 
 // ── Web Speech API ────────────────────────────────────────
 function initRecognition() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    console.warn('[HUD] SpeechRecognition not available');
-    return;
-  }
-  recognition = new SpeechRecognition();
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { console.warn('[HUD] SpeechRecognition 미지원'); speechEnabled = false; return; }
+  recognition = new SR();
   recognition.lang = 'ko-KR';
   recognition.continuous = true;
   recognition.interimResults = true;
@@ -770,6 +1135,10 @@ function initRecognition() {
       const text = result[0].transcript.trim();
       if (!text) continue;
       if (result.isFinal) {
+        if (isPlayingAudio) {
+          stopAudio();
+          console.log('[BARGE-IN]', text);
+        }
         addTranscript('user', text);
         sendTranscript(text, true);
         setVoiceState('thinking');
@@ -779,77 +1148,82 @@ function initRecognition() {
 
   recognition.onend = () => {
     recognitionRunning = false;
-    // Auto-restart if we want it running
-    if (speechEnabled && !isPlayingAudio && voiceState !== 'thinking') {
-      setTimeout(startRecognition, 500);
+    if (speechEnabled && voiceState !== 'thinking') {
+      setTimeout(startRecognition, 300);
     }
   };
 
   recognition.onerror = (e) => {
-    if (e.error !== 'aborted') console.warn('[HUD] Speech error:', e.error);
+    if (e.error !== 'aborted' && e.error !== 'no-speech') console.warn('[HUD] Speech error:', e.error);
     recognitionRunning = false;
+    if (speechEnabled && voiceState !== 'thinking') {
+      setTimeout(startRecognition, 500);
+    }
   };
 }
 
 function startRecognition() {
-  if (!recognition || recognitionRunning || !speechEnabled || isPlayingAudio) return;
+  if (!recognition || !speechEnabled || recognitionRunning) return;
+  if (voiceState === 'thinking') return;
   try {
     recognition.start();
     recognitionRunning = true;
-    setVoiceState('listening');
+    if (!isPlayingAudio) setVoiceState('listening');
   } catch {}
 }
 
 function stopRecognition() {
   if (!recognition || !recognitionRunning) return;
-  try {
-    recognition.abort();
-    recognitionRunning = false;
-  } catch {}
+  try { recognition.abort(); } catch {}
+  recognitionRunning = false;
 }
 
 // ── HUD Context (calendar / tasks) ───────────────────────
 async function fetchHudContext() {
   try {
-    const resp = await fetch('http://localhost:8340/api/hud-context');
+    const resp = await fetch('https://localhost:8340/api/hud-context');
     if (!resp.ok) return;
     const data = await resp.json();
 
     // Calendar
     if (Array.isArray(data.calendar) && data.calendar.length > 0) {
       calendarItems.innerHTML = '';
-      data.calendar.slice(0, 4).forEach(ev => {
+      data.calendar.slice(0, 6).forEach(ev => {
         const item = document.createElement('div');
-        item.className = 'info-item';
-        item.innerHTML = `<span class="item-time">${ev.time || ''}</span>${ev.title || ev}`;
+        item.className = 'cal-item';
+        item.innerHTML = `<span class="ct">${ev.time || ''}</span>${ev.title || ev}`;
         calendarItems.appendChild(item);
       });
     } else {
-      calendarItems.innerHTML = '<div class="info-item-empty">일정 없음</div>';
-    }
-
-    // Tasks
-    if (Array.isArray(data.tasks) && data.tasks.length > 0) {
-      taskItems.innerHTML = '';
-      data.tasks.slice(0, 4).forEach(t => {
-        const item = document.createElement('div');
-        item.className = 'info-item';
-        const title = t.title || t.prompt || JSON.stringify(t);
-        item.textContent = title.length > 30 ? title.slice(0, 28) + '…' : title;
-        taskItems.appendChild(item);
-      });
-    } else {
-      taskItems.innerHTML = '<div class="info-item-empty">없음</div>';
+      calendarItems.innerHTML = '<div class="cal-empty">일정 없음</div>';
     }
 
     // Desktop
     if (data.active_desktop) {
       activeDesktop = data.active_desktop;
+      const lpd = document.getElementById('lp-desktop');
+      if (lpd) lpd.textContent = activeDesktop;
     }
-    if (data.project && data.project.name) {
-      activeDesktopName = data.project.name;
-      desktopNameEl.textContent = activeDesktopName;
+    if (data.project) {
+      if (data.project.name) {
+        activeDesktopName = data.project.name;
+        desktopNameEl.textContent = activeDesktopName;
+        const lpdn = document.getElementById('lp-dname');
+        if (lpdn) lpdn.textContent = activeDesktopName;
+      }
+      if (data.project.name) {
+        const lpproj = document.getElementById('lp-proj');
+        if (lpproj) lpproj.textContent = data.project.name;
+      }
+      if (data.project.path) {
+        const lppath = document.getElementById('lp-path');
+        if (lppath) {
+          const pathShort = data.project.path.replace(/^\/Users\/[^/]+\//, '~/');
+          lppath.textContent = pathShort;
+        }
+      }
     }
+    updateLeftPanel();
   } catch {}
 }
 
@@ -875,23 +1249,41 @@ async function startCamera() {
     video.srcObject = stream;
     await video.play();
 
-    if (!mpHands) {
-      mpHands = new Hands({
-        locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`
-      });
-      mpHands.setOptions({
-        maxNumHands: 2,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.7,
-        minTrackingConfidence: 0.5,
-      });
-      mpHands.onResults(onHandsResults);
+    // 비디오가 실제로 재생 가능한 상태가 될 때까지 대기
+    if (video.readyState < 2) {
+      await new Promise(resolve => video.addEventListener('canplay', resolve, { once: true }));
     }
+
+    mpHands = new Hands({
+      locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`
+    });
+    mpHands.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.5,
+    });
+    mpHands.onResults(onHandsResults);
 
     mpCamera = new Camera(video, {
       onFrame: async () => {
-        if (mpHands && cameraRunning) {
+        // 비디오 준비 전이면 스킵
+        if (!mpHands || !cameraRunning || video.readyState < 2) return;
+        try {
           await mpHands.send({ image: video });
+          if (mediapipeCrashCount > 0) mediapipeCrashCount = 0;
+        } catch (e) {
+          mediapipeCrashCount++;
+          cameraRunning = false;
+          mpHands = null;
+          if (mediapipeCrashCount >= 3) {
+            console.error('[HUD] MediaPipe 반복 크래시 — 페이지 재로드');
+            mediapipeCrashCount = 0;
+            setTimeout(() => location.reload(), 500);
+          } else {
+            console.warn(`[HUD] MediaPipe 크래시 (${mediapipeCrashCount}/3), 재시작 중...`);
+            setTimeout(startCamera, 2000);
+          }
         }
       },
       width: 640,
@@ -917,9 +1309,33 @@ function stopCamera() {
 
 // ── Hand history ──────────────────────────────────────────
 function updateHandHistory(label, wristLM) {
+  const now = Date.now();
   const history = handHistory[label] || (handHistory[label] = []);
-  history.push({ x: wristLM.x, y: wristLM.y, t: Date.now() });
+  history.push({ x: 1 - wristLM.x, y: wristLM.y, t: now });
   if (history.length > CONFIG.HAND_HISTORY) history.shift();
+
+  // Settle gate: block next swipe until hand actually stops moving.
+  // Use path length (not net displacement) to avoid false release at direction-reversal.
+  if (swipeWaitForSettle) {
+    const elapsed = now - lastSwipeTime;
+    // Max settle wait: force-release after 1000ms for rapid sequential swipes
+    if (elapsed > 1000) {
+      swipeWaitForSettle = false;
+      for (const k of Object.keys(handHistory)) handHistory[k] = [];
+    } else if (elapsed > 600 && history.length >= 8) {
+      const tail = history.slice(-8);
+      let pathLen = 0;
+      for (let i = 1; i < tail.length; i++) {
+        pathLen += Math.abs(tail[i].x - tail[i - 1].x);
+      }
+      const dt = tail[tail.length - 1].t - tail[0].t;
+      const pathV = dt > 0 ? pathLen / (dt / 1000) : 999;
+      if (pathV < 0.08) {
+        swipeWaitForSettle = false;
+        for (const k of Object.keys(handHistory)) handHistory[k] = [];
+      }
+    }
+  }
 }
 
 // ── Hand visualization ────────────────────────────────────
@@ -957,6 +1373,51 @@ function drawHand(landmarks, label, W, H) {
     ctx.fill();
   }
   ctx.restore();
+}
+
+// ── Index finger pointer ──────────────────────────────────
+let pointerSmooth = null;
+const POINTER_SMOOTH_ALPHA = 0.4;
+
+function isPointingGesture(landmarks) {
+  return (
+    landmarks[LM.INDEX_TIP].y < landmarks[LM.INDEX_MCP].y &&
+    landmarks[LM.MIDDLE_TIP].y > landmarks[LM.MIDDLE_MCP].y &&
+    landmarks[LM.RING_TIP].y   > landmarks[LM.RING_MCP].y   &&
+    landmarks[LM.PINKY_TIP].y  > landmarks[LM.PINKY_MCP].y
+  );
+}
+
+function drawIndexPointer(landmarks, W, H) {
+  const tip = landmarks[LM.INDEX_TIP];
+  const x = mirrorX(tip.x, W);
+  const y = toCanvasY(tip.y, H);
+  const R = 12;
+  ctx.save();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#ffffff';
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.shadowBlur = 16;
+  ctx.shadowColor = '#ffffff';
+  ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x - R - 5, y); ctx.lineTo(x + R + 5, y);
+  ctx.moveTo(x, y - R - 5); ctx.lineTo(x, y + R + 5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function moveMouseToIndexTip(landmarks) {
+  const tip = landmarks[LM.INDEX_TIP];
+  const rawX = (1 - tip.x) * screenW;
+  const rawY = tip.y * screenH;
+  if (!pointerSmooth) {
+    pointerSmooth = { x: rawX, y: rawY };
+  } else {
+    pointerSmooth.x = POINTER_SMOOTH_ALPHA * rawX + (1 - POINTER_SMOOTH_ALPHA) * pointerSmooth.x;
+    pointerSmooth.y = POINTER_SMOOTH_ALPHA * rawY + (1 - POINTER_SMOOTH_ALPHA) * pointerSmooth.y;
+  }
+  sendMotionEvent('motion.mouse.move', { x: Math.round(pointerSmooth.x), y: Math.round(pointerSmooth.y) });
 }
 
 // ── Cat's cradle ──────────────────────────────────────────
@@ -1023,6 +1484,12 @@ function onHandsResults(results) {
   const handedness = results.multiHandedness    || [];
 
   if (hands.length === 0) {
+    dropoutFrames++;
+    if (dropoutFrames <= DROPOUT_TOLERANCE) {
+      // Brief dropout — skip frame but don't reset hand state
+      cradleAlpha = Math.max(0, cradleAlpha - CRADLE_FADE_SPEED);
+      return;
+    }
     if (!handLostTimer && motionEnabled && !motionPaused) {
       handLostTimer = setTimeout(() => {
         sendMotionEvent('motion.status.hand_lost');
@@ -1033,18 +1500,35 @@ function onHandsResults(results) {
     if (cradleAlpha > 0) drawCatsCradle(W, H);
     return;
   }
+  dropoutFrames = 0;
 
   if (handLostTimer) { clearTimeout(handLostTimer); handLostTimer = null; }
   if (motionPaused && motionEnabled) {
     sendMotionEvent('motion.status.hand_detected');
     motionPaused = false;
+    // Fresh start after hand re-detection
+    swipeWaitForSettle = false;
+    for (const k of Object.keys(handHistory)) handHistory[k] = [];
   }
 
   const handMap = {};
   for (let i = 0; i < hands.length; i++) {
-    const label = handedness[i]?.classification?.[0]?.label || 'Unknown';
+    let label = handedness[i]?.label || 'Unknown';
+    if (handMap[label]) label = label + '_' + i; // 두 손 충돌 방지
     handMap[label] = hands[i];
     updateHandHistory(label, hands[i][LM.WRIST]);
+  }
+
+  // Update right panel hand info
+  const rpHands = document.getElementById('rp-hands');
+  const rpHlabel = document.getElementById('rp-hlabel');
+  if (rpHands) rpHands.textContent = `${hands.length}개`;
+  if (rpHlabel) {
+    const LABEL_MAP = { Left: '오른손', Right: '왼손', Unknown: '손' };
+    const labels = Object.keys(handMap)
+      .map(l => LABEL_MAP[l.replace(/_\d+$/, '')] || '손')
+      .join('/');
+    rpHlabel.textContent = labels || '—';
   }
 
   for (let hi = 0; hi < Math.min(hands.length, 2); hi++) {
@@ -1062,206 +1546,141 @@ function onHandsResults(results) {
   cradleAlpha = Math.max(0, Math.min(1, cradleAlpha + (bothHandsDetected ? CRADLE_FADE_SPEED : -CRADLE_FADE_SPEED)));
 
   for (let i = 0; i < hands.length; i++) {
-    const label = handedness[i]?.classification?.[0]?.label || 'Unknown';
+    const label = handedness[i]?.label || 'Unknown';
     drawHand(hands[i], label, W, H);
   }
   drawCatsCradle(W, H);
 
-  if (motionEnabled && !motionPaused) {
-    recognizeGestures(handMap, W, H);
+  // 검지 포인터 — 오른손(MediaPipe "Left")만 적용
+  {
+    let rightHandLandmarks = null;
+    for (let i = 0; i < hands.length; i++) {
+      if ((handedness[i]?.label || 'Unknown') === 'Left') { // camera Left = user's right hand
+        rightHandLandmarks = hands[i];
+        break;
+      }
+    }
+    if (rightHandLandmarks && isPointingGesture(rightHandLandmarks)) {
+      drawIndexPointer(rightHandLandmarks, W, H);
+      moveMouseToIndexTip(rightHandLandmarks);
+    } else {
+      pointerSmooth = null;
+    }
+  }
+
+  // 주먹 제스처 — 웨이크 중단 (손 개수 무관)
+  if (hands.length >= 1) {
+    checkFistGesture(handMap);
+  }
+
+  // 손 1개일 때만 스와이프 감지 (양손 동시 오인식 방지)
+  if (hands.length === 1) {
+    detectSwipeGestures(handMap);
   }
 }
 
 // ── Gesture helpers ───────────────────────────────────────
-function dist2D(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
-function isFingerExtended(hand, tipIdx, pipIdx) {
-  return hand[tipIdx].y < hand[pipIdx].y;
+function isFistGesture(landmarks) {
+  // 검지~소지 손끝이 해당 MCP(손가락 뿌리)보다 아래(y가 큼) = 손가락이 접혀 있음
+  const tips = [LM.INDEX_TIP, LM.MIDDLE_TIP, LM.RING_TIP, LM.PINKY_TIP];
+  const mcps = [LM.INDEX_MCP, LM.MIDDLE_MCP, LM.RING_MCP, LM.PINKY_MCP];
+  return tips.every((tip, i) => landmarks[tip].y > landmarks[mcps[i]].y);
 }
 
-function isFistGesture(hand) {
-  // All 4 finger tips below their PIP joints (thumb excluded)
-  return (
-    hand[LM.INDEX_TIP].y  > hand[LM.INDEX_PIP].y &&
-    hand[LM.MIDDLE_TIP].y > hand[LM.MIDDLE_PIP].y &&
-    hand[LM.RING_TIP].y   > hand[LM.RING_PIP].y &&
-    hand[LM.PINKY_TIP].y  > hand[LM.PINKY_PIP].y
-  );
+function isOpenHandGesture(landmarks) {
+  // 검지~소지 손끝이 해당 MCP보다 위(y가 작음) = 손가락이 펼쳐져 있음
+  const tips = [LM.INDEX_TIP, LM.MIDDLE_TIP, LM.RING_TIP, LM.PINKY_TIP];
+  const mcps = [LM.INDEX_MCP, LM.MIDDLE_MCP, LM.RING_MCP, LM.PINKY_MCP];
+  return tips.every((tip, i) => landmarks[tip].y < landmarks[mcps[i]].y);
 }
 
-function isPalmGesture(hand) {
-  // All 5 fingertips above their PIP joints
-  return (
-    hand[LM.THUMB_TIP].y  < hand[LM.THUMB_IP].y &&
-    hand[LM.INDEX_TIP].y  < hand[LM.INDEX_PIP].y &&
-    hand[LM.MIDDLE_TIP].y < hand[LM.MIDDLE_PIP].y &&
-    hand[LM.RING_TIP].y   < hand[LM.RING_PIP].y &&
-    hand[LM.PINKY_TIP].y  < hand[LM.PINKY_PIP].y
-  );
-}
+function checkFistGesture(handMap) {
+  const hand = Object.values(handMap)[0];
+  if (!hand) { fistHoldStart = 0; fistTriggered = false; return; }
 
-function isVSignGesture(hand) {
-  // Index + middle extended, others closed
-  const indexUp  = hand[LM.INDEX_TIP].y  < hand[LM.INDEX_PIP].y;
-  const middleUp = hand[LM.MIDDLE_TIP].y < hand[LM.MIDDLE_PIP].y;
-  const ringDown  = hand[LM.RING_TIP].y   > hand[LM.RING_PIP].y;
-  const pinkyDown = hand[LM.PINKY_TIP].y  > hand[LM.PINKY_PIP].y;
-  return indexUp && middleUp && ringDown && pinkyDown;
+  if (isOpenHandGesture(hand)) {
+    if (fistHoldStart > 0 && !fistTriggered) {
+      if (Date.now() - fistHoldStart < FIST_HOLD_MS) {
+        // 주먹 → 빠른 펼침: Mission Control 열기
+        sendMotionEvent('motion.gesture.mission_control');
+        showGesture('🖐 미션 컨트롤', 1200);
+        console.log('[GESTURE] fist-spread — mission control');
+      }
+    }
+    fistHoldStart = 0;
+    fistTriggered = false;
+  } else if (isFistGesture(hand)) {
+    if (fistTriggered) return;
+    if (!fistHoldStart) { fistHoldStart = Date.now(); return; }
+    if (Date.now() - fistHoldStart >= FIST_HOLD_MS) {
+      fistTriggered = true; fistHoldStart = 0;
+      deactivateWake();
+      showGesture('✊ 인식 중단', 1200);
+      console.log('[GESTURE] fist — wake deactivated');
+    }
+  } else {
+    fistHoldStart = 0;
+    fistTriggered = false;
+  }
 }
 
 // ── Gesture recognition ───────────────────────────────────
-function recognizeGestures(handMap, W, H) {
+function detectSwipeGestures(handMap) {
+  if (swipeWaitForSettle) return; // blocked until hand stops
   const now = Date.now();
-  const rightHand = handMap.Right;
-  const leftHand  = handMap.Left;
-
-  // ── Swipe ────────────────────────────────────────────────
-  for (const label of ['Right', 'Left']) {
+  for (const label of Object.keys(handHistory)) {
     const history = handHistory[label];
-    if (!history || history.length < 10) continue;
+    if (!history || history.length < 6) continue;
     const swipe = detectSwipe(history, now);
-    if (swipe && (now - lastSwipeTime) > CONFIG.SWIPE_DEBOUNCE_MS) {
+    if (swipe) {
       lastSwipeTime = now;
-      if (swipe === 'right') {
+      swipeWaitForSettle = true;
+      // 좌 스와이프 → 다음 데스크톱, 우 스와이프 → 이전 데스크톱 (macOS 트랙패드와 동일)
+      if (swipe === 'left') {
         sendMotionEvent('motion.desktop.next');
-        showGesture('→ 다음 데스크톱');
+        showGesture('← 다음 데스크톱');
         activeDesktop++;
         desktopNameEl.textContent = `데스크톱 ${activeDesktop}`;
       } else {
         sendMotionEvent('motion.desktop.previous');
-        showGesture('← 이전 데스크톱');
+        showGesture('→ 이전 데스크톱');
         if (activeDesktop > 1) activeDesktop--;
         desktopNameEl.textContent = `데스크톱 ${activeDesktop}`;
       }
-      handHistory[label] = [];
+      console.log(`[SWIPE] ${swipe} fired — waiting for hand to settle`);
       break;
-    }
-  }
-
-  // ── New gestures (use either hand) ───────────────────────
-  const primaryHand = rightHand || leftHand;
-  if (primaryHand) {
-    // Fist → Ctrl+C
-    if (isFistGesture(primaryHand) && (now - lastFistTime) > CONFIG.FIST_DEBOUNCE_MS) {
-      lastFistTime = now;
-      sendMotionEvent('gesture', { gesture: 'fist' });
-      showGesture('✊ 인터럽트', 1200);
-    }
-    // Palm → y+Enter
-    else if (isPalmGesture(primaryHand) && (now - lastPalmTime) > CONFIG.PALM_DEBOUNCE_MS) {
-      lastPalmTime = now;
-      sendMotionEvent('gesture', { gesture: 'palm' });
-      showGesture('🤚 승인', 1200);
-    }
-    // V-sign → toggle speech
-    else if (isVSignGesture(primaryHand) && (now - lastVSignTime) > CONFIG.VSIGN_DEBOUNCE_MS) {
-      lastVSignTime = now;
-      speechEnabled = !speechEnabled;
-      if (speechEnabled) {
-        showGesture('✌️ 음성 ON', 1200);
-        startRecognition();
-      } else {
-        showGesture('✌️ 음성 OFF', 1200);
-        stopRecognition();
-        setVoiceState('idle');
-      }
-    }
-  }
-
-  if (!rightHand) return;
-
-  // ── Pointer mode ──────────────────────────────────────────
-  const indexExtended = rightHand[LM.INDEX_TIP].y < rightHand[LM.INDEX_PIP].y - 0.03;
-  const middleFolded  = rightHand[LM.MIDDLE_TIP].y > rightHand[LM.MIDDLE_PIP].y;
-  pointerActive = indexExtended && middleFolded;
-
-  // ── Mouse move ────────────────────────────────────────────
-  if (pointerActive) {
-    const tip = rightHand[LM.INDEX_TIP];
-    const rawX = tip.x * screenW;
-    const rawY = tip.y * screenH;
-    if (smoothX === null) { smoothX = rawX; smoothY = rawY; }
-    const dx = rawX - smoothX;
-    const dy = rawY - smoothY;
-    const threshold = CONFIG.MOUSE_DEAD_ZONE * screenW;
-    if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
-      smoothX = CONFIG.MOUSE_SMOOTH * rawX + (1 - CONFIG.MOUSE_SMOOTH) * smoothX;
-      smoothY = CONFIG.MOUSE_SMOOTH * rawY + (1 - CONFIG.MOUSE_SMOOTH) * smoothY;
-      sendMotionEvent('motion.mouse.move', { x: Math.round(smoothX), y: Math.round(smoothY) });
-      const px = mirrorX(tip.x, W), py = toCanvasY(tip.y, H);
-      ctx.save();
-      ctx.strokeStyle = '#ffff00';
-      ctx.shadowColor = '#ffff00';
-      ctx.shadowBlur  = 20;
-      ctx.lineWidth   = 2;
-      ctx.beginPath();
-      ctx.arc(px, py, 10, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // Left click (thumb + index pinch)
-    const leftPinchDist = dist2D(rightHand[LM.THUMB_TIP], rightHand[LM.INDEX_TIP]);
-    const isPinchLeft = leftPinchDist < CONFIG.PINCH_THRESHOLD;
-    if (isPinchLeft && !leftPinchActive && (now - lastLeftClickTime) > CONFIG.CLICK_DEBOUNCE_MS) {
-      leftPinchActive = true;
-      lastLeftClickTime = now;
-      sendMotionEvent('motion.mouse.left_click', { x: Math.round(smoothX), y: Math.round(smoothY) });
-      showGesture('좌클릭');
-    } else if (!isPinchLeft) { leftPinchActive = false; }
-
-    // Right click (thumb + middle pinch)
-    const rightPinchDist = dist2D(rightHand[LM.THUMB_TIP], rightHand[LM.MIDDLE_TIP]);
-    const isPinchRight = rightPinchDist < CONFIG.PINCH_THRESHOLD;
-    if (isPinchRight && !rightPinchActive && (now - lastRightClickTime) > CONFIG.CLICK_DEBOUNCE_MS) {
-      rightPinchActive = true;
-      lastRightClickTime = now;
-      sendMotionEvent('motion.mouse.right_click', { x: Math.round(smoothX), y: Math.round(smoothY) });
-      showGesture('우클릭');
-    } else if (!isPinchRight) { rightPinchActive = false; }
-  } else {
-    smoothX = null; smoothY = null;
-    leftPinchActive = false;
-    rightPinchActive = false;
-  }
-
-  // ── Scroll ────────────────────────────────────────────────
-  if (now - lastScrollTime > CONFIG.SCROLL_THROTTLE_MS) {
-    const history = handHistory.Right;
-    if (history && history.length >= 3) {
-      const recent = history.slice(-3);
-      const dy = recent[recent.length-1].y - recent[0].y;
-      if (Math.abs(dy) > 0.015) {
-        lastScrollTime = now;
-        sendMotionEvent('motion.mouse.scroll', { dy: -dy * 8 });
-      }
     }
   }
 }
 
+
 // ── Swipe detection ───────────────────────────────────────
 function detectSwipe(history, now) {
-  if (history.length < 10) return null;
-  const recent = history.slice(-12);
-  const first = recent[0];
-  const last  = recent[recent.length - 1];
+  if (history.length < 4) return null;
+  const cutoff = now - 600;
+  const recent = history.filter(p => p.t >= cutoff);
+  if (recent.length < 3) return null;
+  const first = recent[0], last = recent[recent.length - 1];
   const dt = last.t - first.t;
-  if (dt > 1200 || dt < 80) return null;
-  const dx = last.x - first.x;
-  const dy = last.y - first.y;
+  if (dt < 60) return null;
+  const dx = last.x - first.x, dy = last.y - first.y;
   const velocity = Math.abs(dx) / (dt / 1000);
   if (Math.abs(dx) < CONFIG.SWIPE_DISTANCE) return null;
-  if (Math.abs(dx) < Math.abs(dy) * 1.5) return null;
   if (velocity < CONFIG.SWIPE_VELOCITY) return null;
+  dbg.lastSwipeDx = dx; dbg.lastSwipeVelocity = velocity;
+  dbg.lastSwipeDir = dx > 0 ? 'right' : 'left';
   return dx > 0 ? 'right' : 'left';
 }
 
 // ── Gesture badge ─────────────────────────────────────────
-function showGesture(text, durationMs = 800) {
+function showGesture(text, ms = 800) {
+  dbg.lastGesture = text;
   gestureBadge.textContent = text;
   gestureBadge.classList.add('show');
-  clearTimeout(showGesture._timer);
-  showGesture._timer = setTimeout(() => gestureBadge.classList.remove('show'), durationMs);
+  clearTimeout(showGesture._t);
+  showGesture._t = setTimeout(() => gestureBadge.classList.remove('show'), ms);
+  updateDebugPanel();
 }
 
 // ── Calibration ───────────────────────────────────────────
@@ -1296,11 +1715,11 @@ btnClose.addEventListener('click', () => {
   else window.close();
 });
 
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && motionEnabled) {
-    sendMotionEvent('motion_control.pause');
-    showGesture('ESC — 일시정지');
-  }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && motionEnabled) { sendMotionEvent('motion_control.pause'); showGesture('ESC — 일시정지'); }
+  else if (e.key === 'd' || e.key === 'D') { toggleDebugOverlay(); }
+  else if (e.key === 'r' || e.key === 'R') { handHistory.Left = []; handHistory.Right = []; showGesture('R — 제스처 리셋'); }
 });
 
 // ── Three.js Particle Orb ─────────────────────────────────
@@ -1551,33 +1970,50 @@ connectMotionWS();
 connectVoiceWS();
 setVoiceState('idle');
 desktopNameEl.textContent = `데스크톱 ${activeDesktop}`;
+updateLeftPanel();
 
-// Init speech recognition after load
+// Voice WS 연결 지연 대비 5초 폴백
 setTimeout(() => {
-  initRecognition();
-  startRecognition();
-}, 1000);
+  if (!recognition) { initRecognition(); startRecognition(); }
+}, 5000);
 
 // Fetch HUD context
 fetchHudContext();
 setInterval(fetchHudContext, CONFIG.CONTEXT_REFRESH_MS);
 
+// Fetch Claude status
+fetchClaudeStatus();
+setInterval(fetchClaudeStatus, 30000);
+
 // Init Three.js orb
 orb = createOrb(orbCanvas);
 
+// Periodic panel refresh — 2초마다로 제한 (mouse.move 30fps DOM 리플로우 방지)
+setInterval(updateDebugPanel, 2000);
+setInterval(updateLeftPanel, 2000);
+setInterval(updateRightPanel, 2000);
+
+// Camera watchdog: 카메라가 꺼져 있는데 활성 상태면 재시작
+setInterval(() => {
+  if (motionEnabled && !motionPaused && !cameraRunning) {
+    console.warn('[HUD] watchdog: camera stopped unexpectedly — restarting');
+    startCamera();
+  }
+}, 10000);
+
 // Auto-start camera and motion recognition
+// (motion_control.enable is sent in motionWS.onopen — no duplicate here)
 setTimeout(async () => {
   try {
     await startCamera();
     motionEnabled = true;
-    sendMotionEvent('motion_control.enable');
     console.log('[HUD] 모션 인식 자동 시작');
   } catch (err) {
     console.warn('[HUD] 카메라 자동 시작 실패:', err);
   }
 }, 1500);
 
-console.log('[HUD] J.A.R.V.I.S Unified HUD 시작됨');
+console.log('[HUD] DOBBY HUD 시작됨');
 </script>
 </body>
 </html>

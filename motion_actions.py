@@ -1,5 +1,5 @@
 """
-도비일번 Motion Actions — 모션 이벤트 핸들러
+도비 Motion Actions — 모션 이벤트 핸들러
 
 WebSocket으로 받은 모션 이벤트를 처리한다.
 손동작으로 가능한 작업:
@@ -93,16 +93,23 @@ class MotionController:
         elif event_type == "motion_control.status":
             return self._get_status()
 
-        # Motion events — only handle when enabled and not paused
-        if not self.enabled or self.paused:
-            return None
-
+        # 데스크톱 전환은 항상 허용 (모션 제어 활성화 불필요)
         if event_type == "motion.desktop.next":
             return await self._desktop_next()
         elif event_type == "motion.desktop.previous":
             return await self._desktop_previous()
         elif event_type == "motion.desktop.goto":
             return await self._desktop_goto(payload)
+
+        # 제스처 / 마우스 이동 — enabled·paused 무관하게 처리
+        if event_type == "motion.gesture.mission_control":
+            return await self._mission_control()
+        elif event_type == "motion.mouse.move":
+            return await self._mouse_move(payload)
+
+        # 나머지 모션 이벤트는 enabled 상태일 때만 처리
+        if not self.enabled or self.paused:
+            return None
         elif event_type == "motion.project.activate":
             return await self._project_activate(payload)
         elif event_type == "motion.mouse.move":
@@ -173,29 +180,81 @@ class MotionController:
 
     async def _desktop_next(self) -> Optional[str]:
         if not self._desktop_manager:
+            await self._broadcast({
+                "type": "motion_ack",
+                "event": "motion.desktop.next",
+                "ok": False,
+                "message": "데스크톱 관리자가 초기화되지 않았습니다.",
+                "error_code": "NO_DESKTOP_MANAGER",
+                "active_desktop_index": 1,
+            })
             return None
         success = await self._desktop_manager.switch_next()
+        idx = self._desktop_manager.active_index
+        project = self._desktop_manager.get_current_project()
+        name = project["name"] if project else f"데스크톱 {idx}"
+        log.info(f"Desktop next → {idx} ({name}) success={success}")
         if success:
-            project = self._desktop_manager.get_current_project()
-            name = project["name"] if project else f"데스크톱 {self._desktop_manager.active_index}"
             await self._broadcast({
                 "type": "desktop_changed",
-                "index": self._desktop_manager.active_index,
+                "index": idx,
                 "name": name,
+            })
+            await self._broadcast({
+                "type": "motion_ack",
+                "event": "motion.desktop.next",
+                "ok": True,
+                "message": f"→ {name}",
+                "active_desktop_index": idx,
+            })
+        else:
+            await self._broadcast({
+                "type": "motion_ack",
+                "event": "motion.desktop.next",
+                "ok": False,
+                "message": "데스크톱 전환에 실패했습니다. macOS 접근성 권한과 Mission Control 단축키를 확인하세요.",
+                "error_code": "DESKTOP_SWITCH_FAILED",
+                "active_desktop_index": idx,
             })
         return None
 
     async def _desktop_previous(self) -> Optional[str]:
         if not self._desktop_manager:
+            await self._broadcast({
+                "type": "motion_ack",
+                "event": "motion.desktop.previous",
+                "ok": False,
+                "message": "데스크톱 관리자가 초기화되지 않았습니다.",
+                "error_code": "NO_DESKTOP_MANAGER",
+                "active_desktop_index": 1,
+            })
             return None
         success = await self._desktop_manager.switch_previous()
+        idx = self._desktop_manager.active_index
+        project = self._desktop_manager.get_current_project()
+        name = project["name"] if project else f"데스크톱 {idx}"
+        log.info(f"Desktop previous → {idx} ({name}) success={success}")
         if success:
-            project = self._desktop_manager.get_current_project()
-            name = project["name"] if project else f"데스크톱 {self._desktop_manager.active_index}"
             await self._broadcast({
                 "type": "desktop_changed",
-                "index": self._desktop_manager.active_index,
+                "index": idx,
                 "name": name,
+            })
+            await self._broadcast({
+                "type": "motion_ack",
+                "event": "motion.desktop.previous",
+                "ok": True,
+                "message": f"← {name}",
+                "active_desktop_index": idx,
+            })
+        else:
+            await self._broadcast({
+                "type": "motion_ack",
+                "event": "motion.desktop.previous",
+                "ok": False,
+                "message": "데스크톱 전환에 실패했습니다. macOS 접근성 권한과 Mission Control 단축키를 확인하세요.",
+                "error_code": "DESKTOP_SWITCH_FAILED",
+                "active_desktop_index": idx,
             })
         return None
 
@@ -217,6 +276,12 @@ class MotionController:
         if not self._desktop_manager or not name:
             return None
         await self._desktop_manager.switch_to_project(name)
+        return None
+
+    async def _mission_control(self) -> None:
+        import subprocess
+        subprocess.Popen(['osascript', '-e', 'tell application "Mission Control" to launch'])
+        log.info("Mission Control launched via gesture")
         return None
 
     async def _mouse_move(self, payload: dict) -> None:

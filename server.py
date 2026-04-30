@@ -35,7 +35,9 @@ from typing import Optional
 
 import anthropic
 import httpx
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import io
+import tempfile
+from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -67,6 +69,12 @@ log = logging.getLogger("dobby")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 SAY_VOICE = os.getenv("SAY_VOICE", "Yuna")  # macOS say voice (Yuna = 한국어)
 USER_NAME = os.getenv("USER_NAME", "sir")
+
+# Qwen3 TTS (OpenAI-compatible local server)
+QWEN3_TTS_URL   = os.getenv("QWEN3_TTS_URL", "").rstrip("/")
+QWEN3_TTS_KEY   = os.getenv("QWEN3_TTS_KEY", "")
+QWEN3_TTS_VOICE = os.getenv("QWEN3_TTS_VOICE", "serena")
+QWEN3_TTS_MODEL = os.getenv("QWEN3_TTS_MODEL", "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-bf16")
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DESKTOP_PATH = Path.home() / "Desktop"
@@ -76,7 +84,7 @@ BRIDGE_CMD_PIPE = "/tmp/dobi_cmd_pipe"
 BRIDGE_SCRIPT = str(Path(__file__).parent / "terminal_bridge.sh")
 
 DOBBY_SYSTEM_PROMPT = """\
-You are 도비일번 — {user_name}의 AI 음성 비서이자 개발 오케스트레이터입니다.
+You are 도비 — {user_name}의 AI 음성 비서이자 개발 오케스트레이터입니다.
 
 LANGUAGE:
 - Always respond in Korean (한국어).
@@ -311,6 +319,47 @@ async def fetch_weather() -> str:
         log.warning(f"Weather fetch failed: {e}")
     _cached_weather = None
     return "Weather data unavailable."
+
+
+# ── Claude Code binary resolver ──────────────────────────────
+import shutil as _shutil
+_claude_bin_cache: Optional[str] = None
+_claude_bin_checked: bool = False
+
+def resolve_claude_bin() -> Optional[str]:
+    """Claude Code 실행 파일을 찾는다. 결과를 캐시한다."""
+    global _claude_bin_cache, _claude_bin_checked
+    if _claude_bin_checked:
+        return _claude_bin_cache
+    _claude_bin_checked = True
+    # 1. 환경 변수
+    env_bin = os.getenv("CLAUDE_BIN", "")
+    if env_bin and Path(env_bin).exists():
+        _claude_bin_cache = env_bin
+        log.info(f"Claude Code found via CLAUDE_BIN: {env_bin}")
+        return _claude_bin_cache
+    # 2. PATH
+    found = _shutil.which("claude")
+    if found:
+        _claude_bin_cache = found
+        log.info(f"Claude Code found in PATH: {found}")
+        return _claude_bin_cache
+    # 3. 일반 후보 경로
+    home = Path.home()
+    candidates = [
+        "/opt/homebrew/bin/claude",
+        "/usr/local/bin/claude",
+        str(home / ".npm-global" / "bin" / "claude"),
+        str(home / ".local" / "bin" / "claude"),
+        str(home / "bin" / "claude"),
+    ]
+    for cpath in candidates:
+        if Path(cpath).exists():
+            _claude_bin_cache = cpath
+            log.info(f"Claude Code found at: {cpath}")
+            return _claude_bin_cache
+    log.warning("Claude Code 실행 파일을 찾지 못했습니다. CLAUDE_BIN 환경 변수를 설정하거나 claude를 설치하세요.")
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1055,7 +1104,6 @@ _PROJECT_ALIASES = {
     "자비스": "dobby",
     "dobby": "dobby",
     "도비": "dobby",
-    "도비일번": "dobby",
 }
 
 def _find_project_dir(project_name: str) -> str | None:
@@ -1137,7 +1185,7 @@ async def _execute_prompt_project(project_name: str, prompt: str, work_session: 
                         model="claude-haiku-4-5-20251001",
                         max_tokens=150,
                         system=(
-                            "You are 도비일번, reporting back on what you found or built in a project. "
+                            "You are 도비, reporting back on what you found or built in a project. "
                             "Always respond in Korean (한국어). "
                             "Speak in first person — '찾았습니다', '만들었습니다', '검토했습니다'. "
                             "Start with '주인님, ' to get the user's attention. "
@@ -1205,7 +1253,7 @@ async def self_work_and_notify(session: WorkSession, prompt: str, ws):
                 summary = await anthropic_client.messages.create(
                     model="claude-haiku-4-5-20251001",
                     max_tokens=100,
-                    system="You are 도비일번. Always respond in Korean (한국어). Summarize what you just completed in 1 sentence. First person — '만들었습니다', '설정했습니다'. No markdown. Never say 'Claude Code'.",
+                    system="You are 도비. Always respond in Korean (한국어). Summarize what you just completed in 1 sentence. First person — '만들었습니다', '설정했습니다'. No markdown. Never say 'Claude Code'.",
                     messages=[{"role": "user", "content": f"Claude Code completed:\n{full_response[:2000]}"}],
                 )
                 msg = summary.content[0].text
@@ -1258,12 +1306,46 @@ def _strip_wav_nonstandard_chunks(data: bytes) -> bytes:
     return result[:4] + riff_size + result[8:]
 
 
-async def synthesize_speech(text: str) -> Optional[bytes]:
-    """Generate speech audio using macOS say command, returned as WAV."""
-    import tempfile
+async def _tts_qwen3(text: str) -> Optional[bytes]:
+    """Qwen3 TTS via OpenAI-compatible /audio/speech endpoint → WAV bytes."""
+    if not QWEN3_TTS_URL:
+        return None
+    try:
+        headers = {"Content-Type": "application/json"}
+        if QWEN3_TTS_KEY:
+            headers["Authorization"] = f"Bearer {QWEN3_TTS_KEY}"
+        payload = {
+            "model": QWEN3_TTS_MODEL,
+            "input": text,
+            "voice": QWEN3_TTS_VOICE,
+            "response_format": "wav",
+            "temperature": 0.3,
+            "top_p": 0.85,
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                f"{QWEN3_TTS_URL}/audio/speech",
+                headers=headers,
+                json=payload,
+            )
+        if resp.status_code != 200:
+            log.warning(f"Qwen3 TTS HTTP {resp.status_code}")
+            return None
+        raw = resp.content
+        if len(raw) < 100:
+            return None
+        clean = _strip_wav_nonstandard_chunks(raw)
+        log.info(f"Qwen3 TTS: {len(clean)} bytes")
+        return clean
+    except Exception as e:
+        log.warning(f"Qwen3 TTS error: {e}")
+        return None
+
+
+async def _tts_say(text: str) -> Optional[bytes]:
+    """macOS say + afconvert → WAV bytes (fallback)."""
     aiff_path = tempfile.mktemp(suffix=".aiff")
     wav_path = tempfile.mktemp(suffix=".wav")
-
     try:
         proc = await asyncio.create_subprocess_exec(
             "say", "-v", SAY_VOICE, "-o", aiff_path, text,
@@ -1272,9 +1354,7 @@ async def synthesize_speech(text: str) -> Optional[bytes]:
         )
         await proc.wait()
         if proc.returncode != 0:
-            log.error(f"TTS say command failed (code {proc.returncode})")
             return None
-
         conv = await asyncio.create_subprocess_exec(
             "afconvert", aiff_path, "-o", wav_path, "-f", "WAVE", "-d", "LEI16",
             stdout=asyncio.subprocess.DEVNULL,
@@ -1282,18 +1362,14 @@ async def synthesize_speech(text: str) -> Optional[bytes]:
         )
         await conv.wait()
         if conv.returncode != 0:
-            log.error("TTS afconvert failed")
             return None
-
-        _session_tokens["tts_calls"] += 1
-        _append_usage_entry(0, 0, "tts")
         with open(wav_path, "rb") as f:
             raw = f.read()
         clean = _strip_wav_nonstandard_chunks(raw)
-        log.info(f"TTS WAV: {len(raw)} → {len(clean)} bytes after stripping non-standard chunks")
+        log.info(f"say TTS: {len(clean)} bytes")
         return clean
     except Exception as e:
-        log.error(f"TTS error: {e}")
+        log.error(f"say TTS error: {e}")
         return None
     finally:
         for p in (aiff_path, wav_path):
@@ -1301,6 +1377,18 @@ async def synthesize_speech(text: str) -> Optional[bytes]:
                 os.unlink(p)
             except OSError:
                 pass
+
+
+async def synthesize_speech(text: str) -> Optional[bytes]:
+    """Qwen3 TTS 우선, 실패 시 macOS say 폴백."""
+    _session_tokens["tts_calls"] += 1
+    _append_usage_entry(0, 0, "tts")
+
+    audio = await _tts_qwen3(text)
+    if audio:
+        return audio
+    log.info("Qwen3 TTS 실패 — say 폴백")
+    return await _tts_say(text)
 
 
 # ---------------------------------------------------------------------------
@@ -1590,7 +1678,7 @@ async def lifespan(application: FastAPI):
 
     # Start context refresh in a separate thread (never touches event loop)
     _refresh_context_sync()
-    log.info("도비일번 서버 시작")
+    log.info("도비 서버 시작")
 
     yield
 
@@ -1764,6 +1852,88 @@ async def hud_context():
         "tasks": tasks,
         "active_desktop": active_index,
         "project": project,
+    }
+
+
+
+@app.get("/api/system-stats")
+async def system_stats():
+    """Return system CPU/RAM/battery stats for the HUD."""
+    try:
+        import psutil
+        cpu = psutil.cpu_percent(interval=0.1)
+        mem = psutil.virtual_memory()
+        battery = psutil.sensors_battery()
+        bat_pct = round(battery.percent) if battery else None
+        bat_charging = battery.power_plugged if battery else None
+        return {
+            "cpu": round(cpu, 1),
+            "ram": round(mem.percent, 1),
+            "battery": bat_pct,
+            "charging": bat_charging,
+        }
+    except Exception:
+        return {"cpu": None, "ram": None, "battery": None, "charging": None}
+
+
+@app.get("/api/claude/status")
+async def claude_status_endpoint():
+    """Claude Code 실행 파일 상태 확인."""
+    bin_path = resolve_claude_bin()
+    version = None
+    if bin_path:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                bin_path, "--version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+            version = stdout.decode().strip() or None
+        except Exception as e:
+            log.debug(f"claude --version failed: {e}")
+    project = desktop_manager.get_current_project()
+    return {
+        "available": bin_path is not None,
+        "claude_bin": bin_path,
+        "version": version,
+        "current_project": project,
+        "last_error": None if bin_path else "Claude Code 실행 파일을 찾지 못했습니다. CLAUDE_BIN 환경 변수를 설정해 주세요.",
+    }
+
+
+@app.post("/api/claude/open")
+async def claude_open_endpoint(body: dict):
+    """현재 프로젝트에서 Claude Code 터미널을 연다."""
+    project_path = body.get("project_path", "")
+    project_name = body.get("project_name", "")
+    bin_path = resolve_claude_bin()
+    if not bin_path:
+        return {
+            "ok": False,
+            "message": "Claude Code 실행 파일을 찾지 못했습니다. 터미널에서 `which claude` 결과를 확인한 뒤 CLAUDE_BIN 환경 변수에 등록해 주세요.",
+            "error_code": "CLAUDE_BIN_NOT_FOUND",
+        }
+    if not project_path:
+        project = desktop_manager.get_current_project()
+        if project:
+            project_path = project.get("project_path", "")
+            project_name = project_name or project.get("name", "")
+    if not project_path:
+        return {
+            "ok": False,
+            "message": "프로젝트 경로를 알 수 없습니다. project_path를 명시하거나 desktops.yaml을 확인하세요.",
+            "error_code": "PROJECT_PATH_UNKNOWN",
+        }
+    project_path = str(Path(project_path).expanduser().resolve())
+    log.info(f"Opening Claude Code: bin={bin_path} path={project_path}")
+    result = await open_claude_in_project(project_path, "", bin_path=bin_path)
+    return {
+        "ok": result.get("success", False),
+        "message": result.get("confirmation", ""),
+        "project_path": project_path,
+        "project_name": project_name,
+        "claude_bin": bin_path,
     }
 
 
@@ -2257,27 +2427,11 @@ async def motion_handler(ws: WebSocket):
             if not isinstance(payload, dict):
                 payload = {}
 
-            log.debug(f"Motion event: {event_type} payload={payload}")
+            if event_type not in ("motion.mouse.move", "motion.mouse.scroll"):
+                log.info(f"Motion event: {event_type}")
+            else:
+                log.debug(f"Motion event: {event_type}")
 
-            # Handle gesture events directly
-            if event_type == "gesture":
-                gesture = payload.get("gesture")
-                if gesture == "fist":
-                    try:
-                        import pyautogui
-                        pyautogui.hotkey('ctrl', 'c')
-                        log.info("Gesture fist: sent Ctrl+C")
-                    except Exception as ge:
-                        log.warning(f"Gesture fist failed: {ge}")
-                elif gesture == "palm":
-                    try:
-                        import pyautogui
-                        pyautogui.write('y')
-                        pyautogui.press('enter')
-                        log.info("Gesture palm: sent y+Enter")
-                    except Exception as ge:
-                        log.warning(f"Gesture palm failed: {ge}")
-                continue
 
             result = await motion_controller.handle_event(event_type, payload)
             if result:
@@ -2785,7 +2939,7 @@ async def voice_handler(ws: WebSocket):
                                     asyncio.create_task(_do_launch_hud())
 
                                 elif embedded_action["action"] == "open_claude":
-                                    proj_name = target.strip()
+                                    proj_name = embedded_action.get("target", "").strip()
                                     proj_dir = _find_project_dir(proj_name)
                                     async def _do_open_claude(_dir=proj_dir, _name=proj_name, _ws=ws):
                                         if not _dir:
@@ -2802,7 +2956,7 @@ async def voice_handler(ws: WebSocket):
                                     asyncio.create_task(_do_open_claude())
 
                                 elif embedded_action["action"] == "type_to_claude":
-                                    parts = target.split("|||", 1)
+                                    parts = embedded_action.get("target", "").split("|||", 1)
                                     proj_name = parts[0].strip()
                                     msg_to_type = parts[1].strip() if len(parts) > 1 else ""
                                     async def _do_type_to_claude(_name=proj_name, _msg=msg_to_type, _ws=ws):
