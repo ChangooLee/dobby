@@ -164,43 +164,39 @@ async def open_chrome(url: str) -> dict:
     return await open_browser(url, "chrome")
 
 
-async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = None) -> dict:
-    """Open Terminal, cd to project dir, run Claude Code interactively."""
-    import shutil as _shutil
+async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = None, project_name: str = None) -> dict:
+    """Open Terminal and run terminal_bridge.sh for a persistent DOBBY Claude Code session.
+
+    The bridge script maintains a named pipe per project, runs 'claude -p [--continue]'
+    for each incoming prompt, and captures output so DOBBY can read and summarize it.
+    """
     from pathlib import Path as _Path
 
     project_dir = str(_Path(project_dir).expanduser().resolve())
-    project_key = _Path(project_dir).name.lower()
+    if not project_name:
+        project_name = _Path(project_dir).name
 
-    if not bin_path:
-        bin_path = (
-            os.getenv("CLAUDE_BIN")
-            or _shutil.which("claude")
-            or next(
-                (p for p in [
-                    "/opt/homebrew/bin/claude",
-                    "/usr/local/bin/claude",
-                    str(_Path.home() / ".npm-global" / "bin" / "claude"),
-                    str(_Path.home() / ".local" / "bin" / "claude"),
-                    str(_Path.home() / "bin" / "claude"),
-                ] if _Path(p).exists()),
-                None
-            )
-        )
-    if not bin_path:
+    # Normalize key: lowercase, spaces/dashes → underscores
+    proj_key = project_name.lower().strip().replace(" ", "_").replace("-", "_")
+
+    # terminal_bridge.sh lives next to this file
+    bridge_script = str(_Path(__file__).parent / "terminal_bridge.sh")
+    if not _Path(bridge_script).exists():
+        log.error(f"terminal_bridge.sh not found: {bridge_script}")
         return {
             "success": False,
-            "confirmation": "Claude Code 실행 파일을 찾지 못했습니다. `which claude` 결과를 확인한 뒤 CLAUDE_BIN 환경 변수에 등록해 주세요.",
+            "confirmation": "terminal_bridge.sh를 찾지 못했습니다, 주인님.",
         }
 
+    safe_bridge = bridge_script.replace("\\", "\\\\").replace('"', '\\"')
+    safe_key = proj_key.replace("\\", "\\\\").replace('"', '\\"')
     safe_dir = project_dir.replace("\\", "\\\\").replace('"', '\\"')
-    safe_bin = bin_path.replace("\\", "\\\\").replace('"', '\\"')
 
-    # 1단계: Terminal에서 Claude Code 실행
+    # Run: zsh <bridge_script> <project_key> <project_dir>
     open_script = (
         'tell application "Terminal"\n'
         "    activate\n"
-        f'    do script "cd " & quoted form of "{safe_dir}" & " && clear && echo \'◈ DOBBY Claude Code Session\' && {safe_bin} --dangerously-skip-permissions"\n'
+        f'    do script "zsh " & quoted form of "{safe_bridge}" & " " & quoted form of "{safe_key}" & " " & quoted form of "{safe_dir}"\n'
         "end tell"
     )
     proc = await asyncio.create_subprocess_exec(
@@ -219,7 +215,7 @@ async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = 
 
     await _mark_terminal_as_dobby()
 
-    # 2단계: front window id 캡처 (실패해도 세션 오픈은 성공으로 처리)
+    # Capture front window id for reference
     id_script = (
         'tell application "Terminal"\n'
         "    delay 0.4\n"
@@ -234,15 +230,14 @@ async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = 
     id_stdout, _ = await id_proc.communicate()
     try:
         wid = int(id_stdout.decode().strip())
-        _claude_session_windows[project_key] = wid
-        log.info(f"Opened Claude Code for '{project_key}', Terminal window id={wid}")
+        _claude_session_windows[proj_key] = wid
+        log.info(f"Opened bridge for '{proj_key}' (pipe: /tmp/dobi_cmd_{proj_key}_pipe), Terminal window id={wid}")
     except (ValueError, TypeError):
-        log.warning(f"Window ID 캡처 실패 (세션은 열림): {id_stdout.decode()!r}")
+        log.warning(f"Window ID 캡처 실패 (브리지는 시작됨): {id_stdout.decode()!r}")
+
     return {
-        "success": success,
-        "confirmation": "Claude Code를 터미널에서 실행했습니다, 주인님."
-        if success
-        else f"Claude Code 실행에 실패했습니다, 주인님: {stderr.decode()[:100]}",
+        "success": True,
+        "confirmation": f"{project_name} Claude Code를 터미널에서 실행했습니다, 주인님.",
     }
 
 
@@ -402,8 +397,8 @@ async def setup_all_desktops(desktop_manager, proj_sessions) -> str:
             else:
                 log.warning(f"[setup_all] 데스크톱 {idx} 전환 실패")
 
-        # Terminal + Claude Code 열기
-        result = await open_claude_in_project(proj_dir, "")
+        # Terminal + terminal_bridge.sh 열기
+        result = await open_claude_in_project(proj_dir, "", project_name=name)
         if result.get("success"):
             await proj_sessions.open_session(name, proj_dir)
             opened.append(name)

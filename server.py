@@ -1166,8 +1166,8 @@ async def _execute_prompt_project(project_name: str, prompt: str, work_session: 
         log.info(f"Dispatching to {project_name} in {project_dir}: {prompt[:80]}")
         dispatch_registry.update_status(dispatch_id, "building")
 
-        # 브리지를 통해 Terminal.app에서 claude 실행 (보이면서 결과 캡처)
-        full_response = await _bridge_send_command(project_dir, prompt)
+        # bridge가 있으면 터미널에서 실행 (보이면서 결과 캡처), 없으면 subprocess 폴백
+        full_response = await _proj_sessions.send(project_name, project_dir, prompt)
 
         # Auto-open any localhost URLs from response
         import re as _re
@@ -3047,8 +3047,8 @@ async def voice_handler(ws: WebSocket):
                                             switched = await desktop_manager.switch_to_project(_name)
                                             if switched:
                                                 await asyncio.sleep(0.6)  # Space 전환 애니메이션 대기
-                                            # 시각적 터미널 + 세션 동시 초기화
-                                            result = await open_claude_in_project(_dir, "")
+                                            # terminal_bridge.sh 실행 + 세션 등록
+                                            result = await open_claude_in_project(_dir, "", project_name=_name)
                                             await _proj_sessions.open_session(_name, _dir)
                                             msg = result.get("confirmation", f"{_name} Claude Code를 열었습니다, 주인님.")
                                         audio = await synthesize_speech(msg)
@@ -3090,9 +3090,11 @@ async def voice_handler(ws: WebSocket):
                                                 except Exception:
                                                     pass
                                             return
-                                        # 시각 터미널에 붙여넣기 (fire-and-forget)
-                                        asyncio.create_task(prompt_existing_terminal(_name, _msg))
-                                        # 세션에서 응답 캡처
+                                        # bridge가 없을 때만 클립보드 붙여넣기 폴백
+                                        import bridge_session as _bridge_mod
+                                        if not _bridge_mod.is_ready(_name):
+                                            asyncio.create_task(prompt_existing_terminal(_name, _msg))
+                                        # 브리지 or WorkSession으로 응답 캡처
                                         full_response = await _proj_sessions.send(_name, proj_dir, _msg)
                                         # 음성용 요약
                                         try:
