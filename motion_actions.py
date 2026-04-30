@@ -318,13 +318,15 @@ class MotionController:
             if x is not None and y is not None:
                 button = "right" if right else "left"
                 pyautogui.click(int(x), int(y), button=button)
+                log.info(f"Click {button} at ({int(x)}, {int(y)})")
             else:
                 if right:
                     pyautogui.rightClick()
                 else:
                     pyautogui.click()
+                log.info("Click (current pos)")
         except Exception as e:
-            log.debug(f"Click error: {e}")
+            log.warning(f"Click error: {e}")
         return None
 
     async def _mouse_scroll(self, payload: dict) -> None:

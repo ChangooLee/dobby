@@ -1880,8 +1880,7 @@ async def stt_endpoint(audio: UploadFile = File(...)):
                 tmp_path,
                 language="ko",
                 beam_size=5,
-                vad_filter=True,
-                vad_parameters={"min_silence_duration_ms": 400},
+                vad_filter=False,
                 initial_prompt="도비야, 데스크톱 열어줘. 오늘 일정 알려줘. 클로드 코드 실행해줘.",
                 no_speech_threshold=0.6,
             )

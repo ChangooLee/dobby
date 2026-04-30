@@ -649,7 +649,7 @@ const CONFIG = {
   // 핀치 (클릭 / 음성입력)
   PINCH_DIST: 0.07,         // 엄지-검지 거리 임계값 (normalized)
   PINCH_CLICK_MAX_MS: 350,  // 이 시간 내 떼면 클릭
-  PINCH_TYPE_MS: 1000,      // 이 이상 유지하면 음성 입력 모드
+  PINCH_TYPE_MS: 2000,      // 이 이상 유지하면 음성 입력 모드
 
   // 마우스 제어
   MOUSE_SMOOTH: 0.35,
@@ -1523,7 +1523,8 @@ function checkPinchGesture(landmarks, px, py) {
       const held = now - pinchStart;
       if (!pinchTypeFired && held < CONFIG.PINCH_CLICK_MAX_MS) {
         if (typeModeActive) {
-          deactivateTypeMode();
+          // type mode 활성화 직후 1000ms 내 클릭은 무시 (핀치 해제 바운스 방지)
+          if (Date.now() - typeModeActivatedAt > 1000) deactivateTypeMode();
         } else {
           console.log('[PINCH] click held=' + held + 'ms px=' + px + ' py=' + py);
           sendMotionEvent('motion.mouse.left_click', { x: px, y: py });
