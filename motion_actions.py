@@ -380,12 +380,17 @@ class MotionController:
             return None
         import subprocess
         try:
-            # macOS: 클립보드에 복사 후 Cmd+V (한국어 포함 모든 문자 지원)
+            # 클립보드에 복사 후 osascript로 Cmd+V
+            # pyautogui.hotkey은 반복 사용 시 Command 키 상태가 꼬여 v만 입력되는 문제 있음
             subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
-            pyautogui.hotkey("command", "v")
+            subprocess.run(
+                ["osascript", "-e",
+                 'tell application "System Events" to keystroke "v" using {command down}'],
+                check=True,
+            )
             log.info(f"Typed via clipboard: {text!r}")
         except Exception as e:
-            log.debug(f"Type error: {e}")
+            log.warning(f"Type error: {e}")
         return None
 
 
