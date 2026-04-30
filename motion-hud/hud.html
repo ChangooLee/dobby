@@ -1444,6 +1444,8 @@ let pointerSmooth = null;
 const POINTER_SMOOTH_ALPHA = 0.65;
 let lastPointerX = 0;
 let lastPointerY = 0;
+let lastPointingTime = 0;
+const PINCH_GRACE_MS = 400; // allow pinch for 400ms after pointing gesture lost
 
 // 핀치 상태
 let pinchActive = false;
@@ -1711,11 +1713,13 @@ function onHandsResults(results) {
       }
     }
     if (rightHandLandmarks && isPointingGesture(rightHandLandmarks)) {
+      lastPointingTime = Date.now();
       moveMouseToIndexTip(rightHandLandmarks); // pointerSmooth + lastPointerX/Y 업데이트
       drawIndexPointer(rightHandLandmarks, W, H);
       checkPinchGesture(rightHandLandmarks, lastPointerX, lastPointerY);
-    } else if (rightHandLandmarks && pinchActive) {
-      // 핀치 중 검지가 살짝 굽어도 마지막 위치로 계속 감지
+    } else if (rightHandLandmarks && (pinchActive || Date.now() - lastPointingTime < PINCH_GRACE_MS)) {
+      // 핀치 시작 시 검지가 즉시 굽어 isPointingGesture가 false가 되므로
+      // 마지막 포인팅 이후 400ms 이내라면 pinchActive 여부 무관하게 핀치 감지 허용
       checkPinchGesture(rightHandLandmarks, lastPointerX, lastPointerY);
     } else {
       if (pinchDragActive) {
