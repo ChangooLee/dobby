@@ -1,5 +1,5 @@
 """
-도비 Motion Actions — 모션 이벤트 핸들러
+DOBBY Motion Actions — 모션 이벤트 핸들러
 
 WebSocket으로 받은 모션 이벤트를 처리한다.
 손동작으로 가능한 작업:

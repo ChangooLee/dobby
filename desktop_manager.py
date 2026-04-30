@@ -1,5 +1,5 @@
 """
-도비 Desktop Manager — 데스크톱/Space와 프로젝트 매핑 관리
+DOBBY Desktop Manager — 데스크톱/Space와 프로젝트 매핑 관리
 
 활성 데스크톱 인덱스를 추적하고, 프로젝트-데스크톱 매핑 설정을 관리한다.
 실제 macOS Space 전환은 AppleScript를 통해 수행한다.
@@ -25,7 +25,7 @@ except ImportError:
 DEFAULT_CONFIG = {
     "desktops": {
         1: {
-            "name": "도비 메인",
+            "name": "DOBBY 메인",
             "project_path": str(Path(__file__).parent),
             "role": "main_control"
         }

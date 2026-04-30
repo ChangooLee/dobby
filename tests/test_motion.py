@@ -1,5 +1,5 @@
 """
-도비 Motion Control 테스트
+DOBBY Motion Control 테스트
 
 최소 테스트:
 - GestureRecognizer 논리 검증
@@ -295,7 +295,7 @@ async def run_async_tests():
 
 
 if __name__ == "__main__":
-    print("도비 Motion Control 테스트\n")
+    print("DOBBY Motion Control 테스트\n")
 
     print("[동기 테스트]")
     sp, sf = run_sync_tests()

@@ -84,7 +84,7 @@ BRIDGE_CMD_PIPE = "/tmp/dobi_cmd_pipe"
 BRIDGE_SCRIPT = str(Path(__file__).parent / "terminal_bridge.sh")
 
 DOBBY_SYSTEM_PROMPT = """\
-You are 도비 — {user_name}의 AI 음성 비서이자 개발 오케스트레이터입니다.
+You are DOBBY — {user_name}의 AI 음성 비서이자 개발 오케스트레이터입니다.
 
 LANGUAGE:
 - 반드시 한국어로만 답변한다. 영어 사용 절대 금지.
@@ -1188,7 +1188,7 @@ async def _execute_prompt_project(project_name: str, prompt: str, work_session: 
                         model="claude-haiku-4-5-20251001",
                         max_tokens=150,
                         system=(
-                            "You are 도비, reporting back on what you found or built in a project. "
+                            "You are DOBBY, reporting back on what you found or built in a project. "
                             "Always respond in Korean (한국어). "
                             "Speak in first person — '찾았습니다', '만들었습니다', '검토했습니다'. "
                             "Start with '주인님, ' to get the user's attention. "
@@ -1256,7 +1256,7 @@ async def self_work_and_notify(session: WorkSession, prompt: str, ws):
                 summary = await anthropic_client.messages.create(
                     model="claude-haiku-4-5-20251001",
                     max_tokens=100,
-                    system="You are 도비. Always respond in Korean (한국어). Summarize what you just completed in 1 sentence. First person — '만들었습니다', '설정했습니다'. No markdown. Never say 'Claude Code'.",
+                    system="You are DOBBY. Always respond in Korean (한국어). Summarize what you just completed in 1 sentence. First person — '만들었습니다', '설정했습니다'. No markdown. Never say 'Claude Code'.",
                     messages=[{"role": "user", "content": f"Claude Code completed:\n{full_response[:2000]}"}],
                 )
                 msg = summary.content[0].text
@@ -1682,7 +1682,7 @@ async def lifespan(application: FastAPI):
 
     # Start context refresh in a separate thread (never touches event loop)
     _refresh_context_sync()
-    log.info("도비 서버 시작")
+    log.info("DOBBY 서버 시작")
 
     yield
 
