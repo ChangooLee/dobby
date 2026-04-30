@@ -381,11 +381,10 @@ class MotionController:
         if not text:
             return None
         import subprocess, time
-        from pynput.keyboard import Key, Controller as KbdCtrl
         try:
+            from pynput.keyboard import Key, Controller as KbdCtrl
             subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
             time.sleep(0.05)
-            # 매번 새 Controller 인스턴스 — 누적된 modifier 상태 오염 없음
             kbd = KbdCtrl()
             kbd.press(Key.cmd)
             kbd.press('v')
