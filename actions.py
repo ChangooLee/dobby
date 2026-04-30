@@ -361,6 +361,72 @@ return "OK"
         return {"success": False, "confirmation": "터미널 접근 중 오류가 발생했습니다, 주인님."}
 
 
+async def setup_all_desktops(desktop_manager, proj_sessions) -> str:
+    """각 데스크톱으로 이동하며 Claude Code를 열고 세션을 초기화한다.
+
+    desktop_manager: DesktopManager 인스턴스
+    proj_sessions: project_sessions 모듈
+    반환값: 결과 요약 문자열
+    """
+    from pathlib import Path as _Path
+
+    desktops = desktop_manager.list_desktops()
+    opened = []
+    failed = []
+
+    original_index = desktop_manager.active_index
+
+    for desktop in desktops:
+        idx = desktop["index"]
+        name = desktop["name"]
+        project_path = desktop.get("project_path", "")
+        role = desktop.get("role", "")
+
+        if role in ("misc",) or not project_path:
+            log.info(f"[setup_all] 데스크톱 {idx} ({name}) 건너뜀 — role={role}")
+            continue
+
+        proj_dir = str(_Path(project_path).expanduser().resolve())
+        if not _Path(proj_dir).exists():
+            log.warning(f"[setup_all] 데스크톱 {idx} ({name}) 경로 없음: {proj_dir}")
+            failed.append(name)
+            continue
+
+        log.info(f"[setup_all] 데스크톱 {idx} ({name}) 설정 중...")
+
+        # 해당 데스크톱으로 이동
+        if idx != desktop_manager.active_index:
+            switched = await desktop_manager.switch_to(idx)
+            if switched:
+                await asyncio.sleep(0.8)  # Space 전환 애니메이션
+            else:
+                log.warning(f"[setup_all] 데스크톱 {idx} 전환 실패")
+
+        # Terminal + Claude Code 열기
+        result = await open_claude_in_project(proj_dir, "")
+        if result.get("success"):
+            await proj_sessions.open_session(name, proj_dir)
+            opened.append(name)
+            log.info(f"[setup_all] {name} OK")
+        else:
+            failed.append(name)
+            log.warning(f"[setup_all] {name} 실패: {result.get('confirmation')}")
+
+        await asyncio.sleep(0.5)  # 다음 데스크톱 전환 전 여유
+
+    # 원래 데스크톱으로 복귀
+    if desktop_manager.active_index != original_index:
+        await desktop_manager.switch_to(original_index)
+
+    if opened:
+        summary = f"데스크톱 {len(opened)}개에 Claude Code를 열었습니다: {', '.join(opened)}."
+    else:
+        summary = "열린 프로젝트가 없습니다."
+    if failed:
+        summary += f" 실패: {', '.join(failed)}."
+    return summary
+
+
 async def get_chrome_tab_info() -> dict:
     """Read the current Chrome tab's title and URL via AppleScript."""
     script = (

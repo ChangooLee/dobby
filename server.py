@@ -42,7 +42,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from actions import execute_action, monitor_build, open_terminal, open_browser, open_claude_in_project, _generate_project_name, prompt_existing_terminal, get_active_claude_sessions_summary
+from actions import execute_action, monitor_build, open_terminal, open_browser, open_claude_in_project, _generate_project_name, prompt_existing_terminal, get_active_claude_sessions_summary, setup_all_desktops
 import project_sessions as _proj_sessions
 from work_mode import WorkSession, is_casual_question
 from screen import get_active_windows, take_screenshot, describe_screen, format_windows_for_context
@@ -223,6 +223,8 @@ When you decide the user needs something DONE (not just discussed), include an a
 - [ACTION:TYPE_TO_CLAUDE] project_name ||| message — 이미 열려있는 Terminal 창에 텍스트를 타이핑해서 보냄 (기존 Claude Code 세션에 명령 전달).
   "moba 클로드 코드에 버그 수정해달라고 해" → [ACTION:TYPE_TO_CLAUDE] moba ||| 버그를 수정해줘
   "지금 열린 dobby에 최근 커밋 정리해달라고 해" → [ACTION:TYPE_TO_CLAUDE] dobby ||| 최근 커밋을 정리해줘
+
+- [ACTION:SETUP_DESKTOPS] — config/desktops.yaml에 설정된 모든 데스크톱을 순서대로 방문하며 각 프로젝트에 Claude Code를 열고 세션 초기화. "모든 데스크톱 설정해줘" / "전체 프로젝트 세팅해줘" / "각 데스크톱에 클로드 코드 열어줘" → [ACTION:SETUP_DESKTOPS]
 
 IMPORTANT: 프로젝트에 관한 질문은 PROMPT_PROJECT, 인터랙티브 세션 열기는 OPEN_CLAUDE, 이미 열린 창에 명령은 TYPE_TO_CLAUDE. SESSION_OPEN/SEND/BROADCAST/AGGREGATE/LIST/CLOSE 는 현재 비활성화 상태입니다.
 - [ACTION:ADD_TASK] priority ||| title ||| description ||| due_date — create a task. Priority: high/medium/low. Due date: YYYY-MM-DD or empty.
@@ -849,7 +851,7 @@ def extract_action(response: str) -> tuple[str, dict | None]:
     Returns (clean_text_for_tts, action_dict_or_none).
     """
     match = _action_re.search(
-        r'\[ACTION:(BUILD|BROWSE|RESEARCH|OPEN_TERMINAL|PROMPT_PROJECT|OPEN_CLAUDE|TYPE_TO_CLAUDE|ADD_TASK|ADD_NOTE|COMPLETE_TASK|REMEMBER|CREATE_NOTE|READ_NOTE|SCREEN'
+        r'\[ACTION:(BUILD|BROWSE|RESEARCH|OPEN_TERMINAL|PROMPT_PROJECT|OPEN_CLAUDE|TYPE_TO_CLAUDE|SETUP_DESKTOPS|ADD_TASK|ADD_NOTE|COMPLETE_TASK|REMEMBER|CREATE_NOTE|READ_NOTE|SCREEN'
         r'|SESSION_OPEN|SESSION_SEND|SESSION_BROADCAST|SESSION_AGGREGATE|SESSION_LIST|SESSION_CLOSE'
         r'|MOTION_ENABLE|MOTION_DISABLE|MOTION_PAUSE|MOTION_RESUME|MOTION_CALIBRATE'
         r'|DESKTOP_GOTO|HUD_SHOW|HUD_HIDE|LAUNCH_HUD)\]\s*(.*?)$',
@@ -3041,6 +3043,10 @@ async def voice_handler(ws: WebSocket):
                                         if not _dir:
                                             msg = f"{_name} 프로젝트를 찾지 못했습니다, 주인님."
                                         else:
+                                            # 프로젝트 데스크톱으로 먼저 이동
+                                            switched = await desktop_manager.switch_to_project(_name)
+                                            if switched:
+                                                await asyncio.sleep(0.6)  # Space 전환 애니메이션 대기
                                             # 시각적 터미널 + 세션 동시 초기화
                                             result = await open_claude_in_project(_dir, "")
                                             await _proj_sessions.open_session(_name, _dir)
@@ -3052,6 +3058,20 @@ async def voice_handler(ws: WebSocket):
                                             except Exception:
                                                 pass
                                     asyncio.create_task(_do_open_claude())
+
+                                elif embedded_action["action"] == "setup_desktops":
+                                    async def _do_setup_desktops(_ws=ws):
+                                        summary = await setup_all_desktops(desktop_manager, _proj_sessions)
+                                        log.info(f"setup_all_desktops: {summary}")
+                                        audio = await synthesize_speech(summary)
+                                        if audio and _ws:
+                                            try:
+                                                await _ws.send_json({"type": "status", "state": "speaking"})
+                                                await _ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": summary})
+                                                await _ws.send_json({"type": "status", "state": "idle"})
+                                            except Exception:
+                                                pass
+                                    asyncio.create_task(_do_setup_desktops())
 
                                 elif embedded_action["action"] == "type_to_claude":
                                     parts = embedded_action.get("target", "").split("|||", 1)
