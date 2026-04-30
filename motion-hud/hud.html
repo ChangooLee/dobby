@@ -1776,7 +1776,9 @@ function checkFistGesture(handMap) {
 
 // ── Gesture recognition ───────────────────────────────────
 function detectSwipeGestures(handMap) {
-  if (swipeWaitForSettle) return; // blocked until hand stops
+  if (typeModeActive) return;  // 음성 입력 중 스와이프 차단
+  if (pinchActive) return;     // 핀치 중 손목 움직임 오인식 방지
+  if (swipeWaitForSettle) return;
   const now = Date.now();
   for (const label of Object.keys(handHistory)) {
     const history = handHistory[label];
