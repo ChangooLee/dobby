@@ -154,21 +154,45 @@ async def open_chrome(url: str) -> dict:
     return await open_browser(url, "chrome")
 
 
-async def open_claude_in_project(project_dir: str, prompt: str) -> dict:
+async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = None) -> dict:
     """Open Terminal, cd to project dir, run Claude Code interactively."""
-    import shlex
-    safe_dir = shlex.quote(project_dir)
-    # If a prompt is given, pass it as initial input via echo pipe; otherwise just open claude
-    if prompt:
-        safe_prompt = prompt.replace("'", "'\\''")
-        cmd = f"cd {safe_dir} && claude --dangerously-skip-permissions"
-    else:
-        cmd = f"cd {safe_dir} && claude --dangerously-skip-permissions"
+    import shutil as _shutil
+    from pathlib import Path as _Path
 
+    # Expand and normalize path
+    project_dir = str(_Path(project_dir).expanduser().resolve())
+
+    # Resolve claude binary
+    if not bin_path:
+        bin_path = (
+            os.getenv("CLAUDE_BIN")
+            or _shutil.which("claude")
+            or next(
+                (p for p in [
+                    "/opt/homebrew/bin/claude",
+                    "/usr/local/bin/claude",
+                    str(_Path.home() / ".npm-global" / "bin" / "claude"),
+                    str(_Path.home() / ".local" / "bin" / "claude"),
+                    str(_Path.home() / "bin" / "claude"),
+                ] if _Path(p).exists()),
+                None
+            )
+        )
+    if not bin_path:
+        return {
+            "success": False,
+            "confirmation": "Claude Code 실행 파일을 찾지 못했습니다. `which claude` 결과를 확인한 뒤 CLAUDE_BIN 환경 변수에 등록해 주세요.",
+        }
+
+    # Escape path for AppleScript string literal (handle rare " in paths)
+    safe_dir = project_dir.replace("\\", "\\\\").replace('"', '\\"')
+    safe_bin = bin_path.replace("\\", "\\\\").replace('"', '\\"')
+
+    # Use AppleScript quoted form of for shell-safe cd
     script = (
         'tell application "Terminal"\n'
         "    activate\n"
-        f'    do script "{cmd}"\n'
+        f'    do script "cd " & quoted form of "{safe_dir}" & " && clear && echo \'◈ DOBBY Claude Code Session\' && {safe_bin} --dangerously-skip-permissions"\n'
         "end tell"
     )
     proc = await asyncio.create_subprocess_exec(
@@ -179,14 +203,14 @@ async def open_claude_in_project(project_dir: str, prompt: str) -> dict:
     _, stderr = await proc.communicate()
     success = proc.returncode == 0
     if not success:
-        log.error(f"open_claude_in_project failed: {stderr.decode()}")
+        log.error(f"open_claude_in_project failed: {stderr.decode()[:200]}")
     else:
         await _mark_terminal_as_dobby()
     return {
         "success": success,
         "confirmation": "Claude Code is running in Terminal, sir. You can watch the progress."
         if success
-        else "Had trouble spawning Claude Code, sir.",
+        else f"Had trouble spawning Claude Code: {stderr.decode()[:100]}",
     }
 
 

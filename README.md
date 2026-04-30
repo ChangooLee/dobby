@@ -1,25 +1,63 @@
-# DOBBY
+# D.O.B.B.Y — Desktop Operations Butler Built for You
+
+macOS 전용 음성 + 손동작 AI 비서.
+음성으로 Claude Code를 제어하고, 손동작으로 macOS 데스크톱을 이동합니다.
 
 > **macOS 전용** — Apple Silicon / Intel Mac 모두 지원. Linux/Windows 미지원.
 
-DOBBY는 한국어 음성 대화 기반의 AI 어시스턴트입니다. 말하면 대답하고, 손동작으로 조작하며, 파티클 오브가 목소리에 반응합니다.
+## 빠른 시작
 
-Apple Calendar · Mail · Notes에 연결되고, 웹을 검색하고, Claude Code 세션을 열어 코드를 작성합니다.
+### 최초 설치
 
----
+```bash
+# 1. 환경 변수 설정
+cp .env.example .env
+# .env 파일에 ANTHROPIC_API_KEY 등 입력
 
-## 구조 한눈에 보기
+# 2. Python 의존성
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+# 3. Motion HUD 빌드
+cd motion-hud && npm install && npm run build && cd ..
+
+# 4. SSL 인증서 생성 (최초 1회)
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj '/CN=localhost'
+```
+
+### 실행 / 종료
+
+```bash
+./start.sh   # 전체 시작 (TTS 서버 + 백엔드 + HUD)
+./stop.sh    # 전체 종료
+```
+
+### 로그 확인
+
+```bash
+tail -f /tmp/dobby_server.log   # 백엔드
+tail -f /tmp/hud.log            # Motion HUD
+tail -f /tmp/qwen3_tts.log      # TTS 서버
+```
+
+> 자세한 내용은 **[RUNBOOK.md](RUNBOOK.md)** 참고
+
+## 아키텍처
 
 ```
-[ 마이크 ]
-    │  Web Speech API (Electron Chromium)
-    ▼
-[ Motion HUD ] ── WebSocket ──► [ FastAPI 백엔드 (port 8340) ]
-  Electron 창                        │
-  ├─ Three.js 파티클 오브             ├─ Claude (AI 응답 생성)
-  ├─ MediaPipe 손동작 인식            ├─ Fish Audio TTS
-  ├─ 음성 인식 / 재생                 ├─ AppleScript (Calendar·Mail·Notes·Terminal)
-  └─ 캘린더·태스크 정보 표시          └─ Claude Code 세션 관리
+Motion HUD (Electron)
+├── hud.html     — JARVIS-like UI, Three.js AI Core, MediaPipe 손동작, 음성 인식/재생
+├── src/main.ts  — BrowserWindow (항상 맨 위, 모든 Space에 표시, 투명)
+└── src/preload.ts
+        │
+        │  wss://localhost:8340/ws/voice  (음성 대화)
+        │  wss://localhost:8340/ws/motion (손동작 이벤트)
+        ▼
+FastAPI 백엔드 (server.py, port 8340)
+├── LLM: Claude Haiku (음성 응답) / Claude Opus (리서치)
+├── TTS: Qwen3 로컬 → macOS say 폴백
+├── STT: faster-whisper (base, ko)
+└── Memory: SQLite + FTS5
 ```
 
 | 레이어 | 기술 |
@@ -29,74 +67,69 @@ Apple Calendar · Mail · Notes에 연결되고, 웹을 검색하고, Claude Cod
 | 통신 | WebSocket (`/ws/voice`, `/ws/motion`) |
 | AI (빠른 응답) | Claude Haiku |
 | AI (리서치·복잡한 태스크) | Claude Opus |
-| TTS | Fish Audio (DOBBY 음성 모델) |
+| TTS | Qwen3 (로컬) → macOS say 폴백 |
+| STT | faster-whisper |
 | macOS 연동 | AppleScript (OAuth 불필요) |
 | 메모리 | SQLite + FTS5 |
 
----
+## HUD 화면 구성
 
-## 요구사항
+- **중앙**: Three.js AI Core Orb — 상태에 따라 색상/크기 변동
+- **좌측 패널**: WORKSPACE(현재 데스크톱/프로젝트) + STATUS + SCHEDULE
+- **우측 패널**: MOTION + GESTURE + ACTION + SYSTEM
+- **손동작 오버레이**: MediaPipe 랜드마크 + Cat's Cradle 연결선
 
-- **macOS 12 Monterey 이상** (AppleScript 의존)
-- Python 3.11+
-- Node.js 18+
-- Anthropic API 키 ([발급](https://console.anthropic.com/))
-- Fish Audio API 키 ([발급](https://fish.audio/))
+## 손동작
 
-> Google Chrome / 별도 브라우저는 필요 없습니다. 모든 UI는 Electron HUD가 담당합니다.
+| 제스처 | 동작 |
+|--------|------|
+| ← 왼쪽 스와이프 | 다음 macOS Space |
+| → 오른쪽 스와이프 | 이전 macOS Space |
 
----
+D 키 → Debug Overlay | Esc → 모션 일시정지
 
-## 빠른 시작
+→ 자세한 내용: [docs/MOTION_CONTROL.md](docs/MOTION_CONTROL.md)
 
-```bash
-git clone https://github.com/ChangooLee/dobby.git
-cd dobby
+## Claude Code 연동
+
+```
+"도비야, [프로젝트명] 클로드 코드 열어줘"
+→ Terminal.app에서 해당 프로젝트 경로로 claude 실행
 ```
 
-Claude Code를 사용한다면 `claude` 를 실행하면 `CLAUDE.md`를 읽고 셋업을 안내합니다.
-
-### 수동 설치
-
-```bash
-# 1. 환경 변수 설정
-cp .env.example .env
-# .env 파일을 열어 API 키 입력
-
-# 2. Python 의존성
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt
-
-# 3. Motion HUD 의존성 빌드
-cd motion-hud && npm install && npm run build && cd ..
-
-# 4. 백엔드 시작
-nohup .venv/bin/python server.py > /tmp/dobby_server.log 2>&1 &
-
-# 5. Motion HUD 시작
-cd motion-hud && npm start &>/tmp/hud.log &
+`CLAUDE_BIN` 환경 변수로 실행 파일 경로를 직접 지정할 수 있습니다:
+```
+CLAUDE_BIN=/opt/homebrew/bin/claude
 ```
 
-> 자세한 실행·재시작·종료 절차는 **[RUNBOOK.md](RUNBOOK.md)** 를 참고하세요.
+확인: `curl -sk https://localhost:8340/api/claude/status`
 
----
+## 액션 태그
 
-## 환경 변수 (`.env`)
+LLM 응답에 삽입되어 시스템 동작을 트리거합니다:
 
-```env
-# 필수
-ANTHROPIC_API_KEY=your-key-here
-FISH_API_KEY=your-key-here
+| 태그 | 동작 |
+|------|------|
+| `[ACTION:BUILD]` | Claude Code로 프로젝트 생성 |
+| `[ACTION:BROWSE]` | Chrome으로 URL/검색 열기 |
+| `[ACTION:RESEARCH]` | Claude Opus 심층 리서치 |
+| `[ACTION:OPEN_CLAUDE]` | 프로젝트 디렉토리에서 Claude Code 실행 |
+| `[ACTION:TYPE_TO_CLAUDE]` | 열린 Claude Code 창에 명령 입력 |
+| `[ACTION:ADD_TASK]` | 태스크 추가 |
+| `[ACTION:REMEMBER]` | 장기 메모리에 저장 |
 
-# 선택
-FISH_VOICE_ID=            # Fish Audio 음성 모델 ID
-USER_NAME=                # 이름 (DOBBY가 호칭에 사용)
-CALENDAR_ACCOUNTS=        # 캘린더 이메일 (쉼표 구분, 비워두면 자동 탐색)
-SAY_VOICE=Yuna            # 로컬 TTS 폴백 음성 (Fish 장애 시)
-MOTION_CONTROL_ENABLED=false
-```
+## 환경 변수
 
----
+| 변수 | 필수 | 설명 |
+|------|------|------|
+| `ANTHROPIC_API_KEY` | ✅ | Claude API 키 |
+| `QWEN3_TTS_URL` | — | Qwen3 TTS 서버 URL |
+| `QWEN3_TTS_KEY` | — | Qwen3 TTS API 키 |
+| `CLAUDE_BIN` | — | claude 실행 파일 경로 (자동 탐색) |
+| `DESKTOP_SWITCH_METHOD` | — | auto\|applescript\|pyautogui |
+| `MOTION_CONTROL_ENABLED` | — | 시작 시 모션 활성화 여부 |
+| `SAY_VOICE` | — | macOS say 폴백 음성 (기본: Yuna) |
+| `USER_NAME` | — | 사용자 이름 |
 
 ## 주요 파일
 
@@ -115,51 +148,30 @@ MOTION_CONTROL_ENABLED=false
 | `config/desktops.yaml` | 데스크톱 ↔ 프로젝트 매핑 |
 | `RUNBOOK.md` | 실행·재시작·종료 절차 |
 
----
+## 재시작 절차
 
-## 기능 상세
+→ [RUNBOOK.md](RUNBOOK.md) 참고
 
-### 음성 대화
-DOBBY는 항상 듣고 있습니다. 자연어로 말하면 Haiku가 1–2문장으로 응답하고, Fish Audio가 음성으로 변환합니다.
+## 문제 해결
 
-### 손동작 제어 (MediaPipe Hands)
+→ [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 
-| 제스처 | 동작 |
-|--------|------|
-| ✊ 주먹 | Ctrl+C (터미널 인터럽트) |
-| 🤚 손바닥 | y + Enter (Claude Code 승인) |
-| ✌️ V사인 | 음성 인식 ON/OFF 토글 |
-| ☝️ 검지 | 마우스 포인터 모드 |
-| 👌 엄지+검지 핀치 | 좌클릭 |
-| 손 좌우 스와이프 | macOS Space 전환 |
+## 포트 및 로그
 
-### 액션 태그
-LLM 응답에 삽입되어 시스템 동작을 트리거합니다:
+| 컴포넌트 | 포트 | 로그 |
+|----------|------|------|
+| FastAPI 백엔드 | 8340 | `/tmp/dobby_server.log` |
+| Motion HUD (Electron) | — | `/tmp/hud.log` |
+| Qwen3 TTS 서버 | 8000 | `/tmp/qwen_tts.log` |
 
-| 태그 | 동작 |
-|------|------|
-| `[ACTION:BUILD]` | Claude Code로 프로젝트 생성 |
-| `[ACTION:BROWSE]` | Chrome으로 URL/검색 열기 |
-| `[ACTION:RESEARCH]` | Claude Opus 심층 리서치 |
-| `[ACTION:OPEN_CLAUDE]` | 프로젝트 디렉토리에서 Claude Code 실행 |
-| `[ACTION:TYPE_TO_CLAUDE]` | 열린 Claude Code 창에 명령 입력 |
-| `[ACTION:ADD_TASK]` | 태스크 추가 |
-| `[ACTION:REMEMBER]` | 장기 메모리에 저장 |
+## 요구사항
 
-### Three.js 파티클 오브
-2000개 파티클이 구형으로 모여 상태에 따라 움직입니다:
-- **idle** — 넓게 퍼져 천천히 유영
-- **listening** — 수축, 선명해짐
-- **thinking** — 밀도 높아짐, 전자 이동 (연결선 사이를 흐르는 빛)
-- **speaking** — 음성 bass에 반응해 파동
+- **macOS 12 Monterey 이상** (AppleScript 의존)
+- Python 3.11+
+- Node.js 18+
+- Anthropic API 키 ([발급](https://console.anthropic.com/))
 
----
-
-## 실행·재시작 절차
-
-→ **[RUNBOOK.md](RUNBOOK.md)** 참고
-
----
+> Google Chrome / 별도 브라우저는 필요 없습니다. 모든 UI는 Electron HUD가 담당합니다.
 
 ## 라이선스
 
@@ -167,6 +179,4 @@ LLM 응답에 삽입되어 시스템 동작을 트리거합니다:
 
 ---
 
-## Credits
-
-Powered by [Anthropic Claude](https://anthropic.com) · [Fish Audio](https://fish.audio) · [MediaPipe](https://mediapipe.dev) · [Three.js](https://threejs.org)
+Powered by [Anthropic Claude](https://anthropic.com) · [MediaPipe](https://mediapipe.dev) · [Three.js](https://threejs.org)

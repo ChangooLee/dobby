@@ -1,0 +1,45 @@
+{
+  "_comment": "이 파일을 config/desktops.json으로 복사하고 실제 경로로 수정하세요.",
+  "desktops": [
+    {
+      "index": 1,
+      "name": "DOBBY Main",
+      "project_key": "dobby",
+      "project_path": "~/Workspace/dobby",
+      "role": "main_control",
+      "description": "DOBBY 메인 제어 화면"
+    },
+    {
+      "index": 2,
+      "name": "agent-portal",
+      "project_key": "agent-portal",
+      "project_path": "~/Workspace/agent-portal",
+      "role": "development_project",
+      "description": "에이전트 포털 프로젝트"
+    },
+    {
+      "index": 3,
+      "name": "mcp-opendart",
+      "project_key": "mcp-opendart",
+      "project_path": "~/Workspace/mcp-opendart",
+      "role": "development_project",
+      "description": "MCP OpenDART 프로젝트"
+    },
+    {
+      "index": 4,
+      "name": "sourceport",
+      "project_key": "sourceport",
+      "project_path": "~/Workspace/sourceport.ai",
+      "role": "development_project",
+      "description": "sourceport.ai 프로젝트"
+    },
+    {
+      "index": 5,
+      "name": "기타",
+      "project_key": "misc",
+      "project_path": "~/Workspace",
+      "role": "misc",
+      "description": "기타 작업 공간"
+    }
+  ]
+}

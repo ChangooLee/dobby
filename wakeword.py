@@ -28,7 +28,7 @@ CHUNK_SAMPLES = int(SAMPLE_RATE * CHUNK_DURATION)
 ENERGY_THRESHOLD = 0.008  # RMS threshold — below this = silence
 COOLDOWN_SECONDS = 3.0    # ignore re-triggers for this long after wake
 
-WAKE_WORDS = ["도비야", "도비", "도비 야", "도비일번", "도비 일번"]
+WAKE_WORDS = ["도비야", "도비", "도비 야", "도비", "도비 일번"]
 DOBBY_URL = "http://localhost:8340"
 
 _last_triggered = 0.0

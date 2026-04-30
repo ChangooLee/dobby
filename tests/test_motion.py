@@ -1,5 +1,5 @@
 """
-도비일번 Motion Control 테스트
+도비 Motion Control 테스트
 
 최소 테스트:
 - GestureRecognizer 논리 검증
@@ -224,12 +224,12 @@ async def test_motion_controller_debounce():
 # ─── 음성 명령 감지 테스트 ──────────────────────────────────────────────────
 
 def test_voice_detect_enable():
-    result = detect_motion_voice_command("도비일번, 모션 제어 시작해")
+    result = detect_motion_voice_command("도비, 모션 제어 시작해")
     assert result == "motion_control.enable"
 
 
 def test_voice_detect_disable():
-    result = detect_motion_voice_command("도비일번, 모션 제어 꺼")
+    result = detect_motion_voice_command("도비, 모션 제어 꺼")
     assert result == "motion_control.disable"
 
 
@@ -295,7 +295,7 @@ async def run_async_tests():
 
 
 if __name__ == "__main__":
-    print("도비일번 Motion Control 테스트\n")
+    print("도비 Motion Control 테스트\n")
 
     print("[동기 테스트]")
     sp, sf = run_sync_tests()

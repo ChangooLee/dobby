@@ -125,12 +125,25 @@ EOF
 ## 주요 설정값 (`.env`)
 
 ```env
-SAY_VOICE=Yuna                  # 한국어 TTS (Fish Audio 장애 시 폴백)
-MOTION_CONTROL_ENABLED=false    # 모션 제어 기본값
-FISH_API_KEY=...                # Fish Audio TTS
-ANTHROPIC_API_KEY=...           # Claude API
+ANTHROPIC_API_KEY=...           # Claude API (필수)
 USER_NAME=...                   # 사용자 이름
+
+# Qwen3 TTS (우선 사용, 실패 시 macOS say로 폴백)
+QWEN3_TTS_URL=http://100.72.205.44:8000/v1   # Tailscale 또는 localhost
+QWEN3_TTS_KEY=...               # API 키
+QWEN3_TTS_VOICE=serena          # serena / vivian / ryan / aiden 등
+QWEN3_TTS_MODEL=mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-bf16
+
+SAY_VOICE=Yuna                  # 한국어 폴백 TTS (Qwen3 불가 시)
 ```
+
+---
+
+## 음성 인식 (STT)
+
+- Whisper (`faster-whisper` base 모델) 사용
+- MediaRecorder 2.5초 청크 → `/api/stt` POST → 결과를 voice WS로 전달
+- 묵음 구간은 Whisper VAD 필터로 자동 제거
 
 ---
 
@@ -138,10 +151,10 @@ USER_NAME=...                   # 사용자 이름
 
 | 증상 | 원인 | 해결 |
 |------|------|------|
-| TTS 음성이 안 나옴 | Fish Audio 키 오류 또는 `SAY_VOICE=Daniel`(영어) | `.env`에서 `SAY_VOICE=Yuna` 설정 후 백엔드 재시작 |
+| TTS 음성이 안 나옴 | Qwen3 서버 미응답 + say 폴백도 실패 | `.env`에서 `SAY_VOICE=Yuna` 확인 후 백엔드 재시작 |
+| Qwen3 TTS 느림 | 서버 불응 → 10초 timeout 후 say로 폴백 | Qwen3 서버 기동 여부 확인 (`curl http://<ip>:8000/v1/models`) |
+| 음성 인식이 배경음도 인식 | Whisper VAD threshold | 조용한 환경에서 사용 또는 STT_CHUNK_MS 늘리기 |
 | 데스크톱 전환 안 됨 | osascript Accessibility 권한 없음 | 시스템 설정 → 개인 정보 → 손쉬운 사용에서 터미널 허용 |
-| 손동작 cat's cradle 안 보임 | MediaPipe 미로드 (CDN 접근 불가) | 인터넷 연결 확인 |
-| 음성 인식 안 됨 | AudioContext suspended | HUD 창을 한 번 클릭 |
 | HUD가 뜨지 않음 | Electron 빌드 없음 | `cd motion-hud && npm run build && npm start` |
 | 백엔드 포트 충돌 | 이전 프로세스 잔존 | `kill $(lsof -ti :8340)` 후 재시작 |
 

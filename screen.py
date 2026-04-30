@@ -164,7 +164,7 @@ async def describe_screen(anthropic_client) -> str:
                 model="claude-haiku-4-5-20251001",
                 max_tokens=300,
                 system=(
-                    "You are 도비일번 analyzing a screenshot of the user's desktop. "
+                    "You are 도비 analyzing a screenshot of the user's desktop. "
                     "Always respond in Korean (한국어). "
                     "Describe what you see concisely: which apps are open, what the user "
                     "appears to be working on, any notable content visible. "
@@ -219,7 +219,7 @@ async def describe_screen(anthropic_client) -> str:
                 model="claude-haiku-4-5-20251001",
                 max_tokens=100,
                 system=(
-                    "You are 도비일번. Always respond in Korean (한국어). Given the user's open windows and apps, summarize "
+                    "You are 도비. Always respond in Korean (한국어). Given the user's open windows and apps, summarize "
                     "what they appear to be working on in 1-2 sentences. Natural voice, no markdown."
                 ),
                 messages=[{"role": "user", "content": "Open windows:\n" + "\n".join(context_parts)}],

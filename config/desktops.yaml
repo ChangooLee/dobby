@@ -1,20 +1,20 @@
-# 도비일번 데스크톱/Space 프로젝트 매핑 설정
+# 도비 데스크톱/Space 프로젝트 매핑 설정
 #
 # 각 데스크톱 번호에 프로젝트 정보를 매핑한다.
 # 데스크톱 번호는 macOS Mission Control의 Space 순서와 일치해야 한다.
 #
 # 음성 명령 예시:
-#   "도비일번, agent-portal로 이동해"
-#   "도비일번, 2번 데스크톱으로 이동해"
-#   "도비일번, mcp-opendart 프로젝트로 이동해"
-#   "도비일번, 현재 데스크톱을 3번으로 맞춰"
+#   "도비, agent-portal로 이동해"
+#   "도비, 2번 데스크톱으로 이동해"
+#   "도비, mcp-opendart 프로젝트로 이동해"
+#   "도비, 현재 데스크톱을 3번으로 맞춰"
 
 desktops:
   1:
-    name: "도비일번 메인"
+    name: "도비 메인"
     project_path: "~/Workspace/dobby"
     role: main_control
-    description: "도비일번 메인 화면. 음성 명령, 모션 제어 허브."
+    description: "도비 메인 화면. 음성 명령, 모션 제어 허브."
 
   2:
     name: "agent-portal"

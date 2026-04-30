@@ -10,3 +10,4 @@ requests>=2.31.0
 sounddevice>=0.4.6
 faster-whisper>=1.0.0
 pyautogui>=0.9.54
+psutil>=5.9.0

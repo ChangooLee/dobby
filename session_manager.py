@@ -1,5 +1,5 @@
 """
-도비일번 Session Manager
+도비 Session Manager
 
 여러 Claude Code 세션을 관리합니다.
 - iTerm2 탭: 시각용 (사람이 보는 용도)
@@ -95,7 +95,7 @@ tell application "iTerm2"
     activate
     set newWindow to (create window with default profile)
     tell current session of newWindow
-        write text "cd '{session.project_path}' && echo '=== 도비일번 세션: {session.name} ===' && claude"
+        write text "cd '{session.project_path}' && echo '=== 도비 세션: {session.name} ===' && claude"
     end tell
 end tell
 '''

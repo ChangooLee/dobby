@@ -1,7 +1,7 @@
 {
   "name": "dobby-motion-hud",
   "version": "1.0.0",
-  "description": "도비일번 Motion HUD — 모든 macOS 데스크톱에 표시되는 손동작 인식 HUD",
+  "description": "도비 Motion HUD — 모든 macOS 데스크톱에 표시되는 손동작 인식 HUD",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc",
@@ -14,6 +14,6 @@
     "typescript": "^5.7.0"
   },
   "dependencies": {
-    "electron": "^28.3.3"
+    "electron": "^33.4.11"
   }
 }

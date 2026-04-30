@@ -26,7 +26,7 @@ const transcriptLog = document.getElementById("transcript-log")!;
 const MAX_ENTRIES = 6;
 
 function addTranscript(role: "user" | "dobi", text: string) {
-  const label = role === "user" ? "나" : "도비일번";
+  const label = role === "user" ? "나" : "도비";
   const entry = document.createElement("div");
   entry.className = `transcript-entry ${role}`;
   entry.innerHTML = `
@@ -144,7 +144,7 @@ socket.onMessage((msg) => {
     }
     // Log text for debugging
     if (msg.text) {
-      console.log("[도비일번]", msg.text);
+      console.log("[도비]", msg.text);
       addTranscript("dobi", msg.text);
     }
   } else if (type === "status") {
