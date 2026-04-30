@@ -92,7 +92,7 @@ class WorkSession:
                 error = stderr.decode().strip()[:200]
                 log.error(f"claude -p error: {error}")
                 self._status = "error"
-                return f"Hit a problem, sir: {error}"
+                return f"문제가 발생했습니다, 주인님: {error}"
 
             log.info(f"Claude Code response for {self._project_name} ({len(response)} chars)")
             return response
@@ -100,11 +100,11 @@ class WorkSession:
         except asyncio.TimeoutError:
             log.error("claude -p timed out after 300s")
             self._status = "timeout"
-            return "That's taking longer than expected, sir. The operation timed out."
+            return "예상보다 오래 걸리고 있습니다, 주인님. 작업이 시간 초과되었습니다."
         except Exception as e:
             log.error(f"Work mode error: {e}")
             self._status = "error"
-            return f"Something went wrong, sir: {str(e)[:100]}"
+            return f"오류가 발생했습니다, 주인님: {str(e)[:100]}"
 
     async def stop(self):
         """End the work session."""

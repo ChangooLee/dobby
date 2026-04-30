@@ -119,7 +119,7 @@ async def open_terminal(command: str = "") -> dict:
         await _mark_terminal_as_dobby()
     return {
         "success": success,
-        "confirmation": "Terminal is open, sir." if success else "I had trouble opening Terminal, sir.",
+        "confirmation": "터미널을 열었습니다, 주인님." if success else "터미널을 여는 데 실패했습니다, 주인님.",
     }
 
 
@@ -155,7 +155,7 @@ async def open_browser(url: str, browser: str = "chrome") -> dict:
         log.error(f"open_browser ({app_name}) failed: {stderr.decode()}")
     return {
         "success": success,
-        "confirmation": f"Pulled that up in {app_name}, sir." if success else f"{app_name} ran into a problem, sir.",
+        "confirmation": f"{app_name}에서 열었습니다, 주인님." if success else f"{app_name} 실행 중 문제가 발생했습니다, 주인님.",
     }
 
 
@@ -224,9 +224,9 @@ async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = 
         log.error(f"open_claude_in_project failed: {stderr.decode()[:200]}")
     return {
         "success": success,
-        "confirmation": "Claude Code is running in Terminal, sir. You can watch the progress."
+        "confirmation": "Claude Code를 터미널에서 실행했습니다, 주인님."
         if success
-        else f"Had trouble spawning Claude Code: {stderr.decode()[:100]}",
+        else f"Claude Code 실행에 실패했습니다, 주인님: {stderr.decode()[:100]}",
     }
 
 
@@ -388,7 +388,7 @@ async def monitor_build(project_dir: str, ws=None, synthesize_fn=None) -> None:
                 log.info(f"Build complete in {project_dir}")
                 if ws and synthesize_fn:
                     try:
-                        msg = "The build is complete, sir."
+                        msg = "빌드가 완료되었습니다, 주인님."
                         audio_bytes = await synthesize_fn(msg)
                         if audio_bytes:
                             encoded = base64.b64encode(audio_bytes).decode()

@@ -1,5 +1,5 @@
 #!/bin/zsh
-# 도비일번 터미널 브리지
+# 도비 터미널 브리지
 # DOBBY(브라우저)가 이 터미널을 통해 claude에 명령하고 결과를 받습니다.
 # 명령은 /tmp/dobi_cmd_pipe 로 수신, 결과는 /tmp/dobi_out_<id>.txt 로 저장.
 
@@ -12,7 +12,7 @@ trap 'rm -f "$CMD_PIPE"; exit 0' SIGINT SIGTERM
 
 clear
 echo "╔══════════════════════════════════════════════╗"
-echo "║          도비일번 터미널 브리지               ║"
+echo "║            도비 터미널 브리지                 ║"
 echo "║  DOBBY가 이 터미널로 claude를 제어합니다    ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
