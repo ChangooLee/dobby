@@ -646,11 +646,10 @@ const CONFIG = {
   HAND_HISTORY: 20,
   HAND_LOST_PAUSE_SEC: 3.0,
 
-  // 핀치 (클릭 / 드래그 / 음성입력)
+  // 핀치 (클릭 / 음성입력)
   PINCH_DIST: 0.07,         // 엄지-검지 거리 임계값 (normalized)
   PINCH_CLICK_MAX_MS: 350,  // 이 시간 내 떼면 클릭
-  PINCH_HOLD_MS: 600,       // 이 이상 유지하면 드래그 시작
-  PINCH_TYPE_MS: 1500,      // 이 이상 유지하면 음성 입력 모드
+  PINCH_TYPE_MS: 1000,      // 이 이상 유지하면 음성 입력 모드
 
   // 마우스 제어
   MOUSE_SMOOTH: 0.35,
@@ -1450,9 +1449,7 @@ const PINCH_GRACE_MS = 400; // allow pinch for 400ms after pointing gesture lost
 // 핀치 상태
 let pinchActive = false;
 let pinchStart = 0;
-let pinchDragFired = false;
 let pinchTypeFired = false;
-let pinchDragActive = false;
 let typeModeActive = false;
 
 function isPointingGesture(landmarks) {
@@ -1470,7 +1467,7 @@ function drawIndexPointer(landmarks, W, H) {
   const y = toCanvasY(tip.y, H);
   const R = 12;
   // 상태별 색상: 일반=흰, 핀치=노랑, 드래그=주황, 타입모드=초록
-  const col = typeModeActive ? '#00ff88' : pinchDragActive ? '#ff8800' : pinchActive ? '#ffee00' : '#ffffff';
+  const col = typeModeActive ? '#00ff88' : pinchActive ? '#ffee00' : '#ffffff';
   ctx.save();
   ctx.lineWidth = pinchActive ? 2.5 : 1.5;
   ctx.strokeStyle = col;
@@ -1514,36 +1511,16 @@ function checkPinchGesture(landmarks, px, py) {
     if (!pinchActive) {
       pinchActive = true;
       pinchStart = now;
-      pinchDragFired = false;
       pinchTypeFired = false;
-    } else {
-      const held = now - pinchStart;
-      if (!pinchTypeFired && held >= CONFIG.PINCH_TYPE_MS) {
-        // 1.5초 이상 — 음성 입력 모드 (드래그 중이면 먼저 해제)
-        pinchTypeFired = true;
-        if (pinchDragActive) {
-          pinchDragActive = false;
-          sendMotionEvent('motion.mouse.button_up', { x: px, y: py });
-        }
-        activateTypeMode();
-      } else if (!pinchDragFired && held >= CONFIG.PINCH_HOLD_MS) {
-        // 0.6초 이상 — 드래그 시작
-        pinchDragFired = true;
-        pinchDragActive = true;
-        sendMotionEvent('motion.mouse.button_down', { x: px, y: py });
-        showGesture('👆 드래그', 600);
-      }
+    } else if (!pinchTypeFired && now - pinchStart >= CONFIG.PINCH_TYPE_MS) {
+      pinchTypeFired = true;
+      activateTypeMode();
     }
   } else {
     if (pinchActive) {
-      const held = Date.now() - pinchStart;
-      if (pinchDragActive) {
-        pinchDragActive = false;
-        sendMotionEvent('motion.mouse.button_up', { x: px, y: py });
-        showGesture('✓ 드래그 완료', 600);
-      } else if (!pinchDragFired && !pinchTypeFired && held < CONFIG.PINCH_CLICK_MAX_MS) {
+      const held = now - pinchStart;
+      if (!pinchTypeFired && held < CONFIG.PINCH_CLICK_MAX_MS) {
         if (typeModeActive) {
-          // 타입 모드 중 클릭 = 종료
           deactivateTypeMode();
         } else {
           sendMotionEvent('motion.mouse.left_click', { x: px, y: py });
@@ -1551,7 +1528,6 @@ function checkPinchGesture(landmarks, px, py) {
         }
       }
       pinchActive = false;
-      pinchDragFired = false;
       pinchTypeFired = false;
     }
   }
@@ -1722,12 +1698,7 @@ function onHandsResults(results) {
       // 마지막 포인팅 이후 400ms 이내라면 pinchActive 여부 무관하게 핀치 감지 허용
       checkPinchGesture(rightHandLandmarks, lastPointerX, lastPointerY);
     } else {
-      if (pinchDragActive) {
-        pinchDragActive = false;
-        sendMotionEvent('motion.mouse.button_up', {});
-      }
       pinchActive = false;
-      pinchDragFired = false;
       pinchTypeFired = false;
       pointerSmooth = null;
     }

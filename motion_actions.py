@@ -96,21 +96,21 @@ class MotionController:
         elif event_type == "motion.desktop.goto":
             return await self._desktop_goto(payload)
 
-        # 제스처 / 마우스 이동 — enabled·paused 무관하게 처리
+        # 마우스 / 클릭 / 타이핑 — enabled 상태 무관하게 항상 처리
         if event_type == "motion.gesture.mission_control":
             return await self._mission_control()
         elif event_type == "motion.mouse.move":
             return await self._mouse_move(payload)
+        elif event_type == "motion.mouse.left_click":
+            return await self._mouse_click(payload, right=False)
+        elif event_type == "motion.type":
+            return await self._type_text(payload)
 
         # 나머지 모션 이벤트는 enabled 상태일 때만 처리
         if not self.enabled or self.paused:
             return None
         elif event_type == "motion.project.activate":
             return await self._project_activate(payload)
-        elif event_type == "motion.mouse.move":
-            return await self._mouse_move(payload)
-        elif event_type == "motion.mouse.left_click":
-            return await self._mouse_click(payload, right=False)
         elif event_type == "motion.mouse.right_click":
             return await self._mouse_click(payload, right=True)
         elif event_type == "motion.mouse.scroll":
@@ -119,8 +119,6 @@ class MotionController:
             return await self._mouse_button_down(payload)
         elif event_type == "motion.mouse.button_up":
             return await self._mouse_button_up(payload)
-        elif event_type == "motion.type":
-            return await self._type_text(payload)
         elif event_type == "motion.status.hand_lost":
             log.info("Hand tracking lost — auto-pausing motion control")
             self.paused = True
