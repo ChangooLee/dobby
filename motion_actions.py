@@ -48,11 +48,6 @@ class MotionController:
         self._last_scroll_time = 0.0
         self._scroll_throttle = 0.05  # seconds
 
-        # Mouse smoothing
-        self._last_mouse_x: Optional[float] = None
-        self._last_mouse_y: Optional[float] = None
-        self._mouse_smooth = 0.4  # EMA alpha
-
         log.info(f"MotionController initialized (enabled={self.enabled})")
 
     def set_desktop_manager(self, dm):
@@ -148,8 +143,6 @@ class MotionController:
     async def _disable(self) -> str:
         self.enabled = False
         self.paused = False
-        self._last_mouse_x = None
-        self._last_mouse_y = None
         log.info("Motion control disabled")
         await self._broadcast({"type": "motion_status", "state": "disabled"})
         return "모션 제어를 끕니다, 주인님."
@@ -304,14 +297,6 @@ class MotionController:
             x, y = float(x), float(y)
         except (TypeError, ValueError):
             return None
-
-        # Apply EMA smoothing
-        if self._last_mouse_x is not None:
-            x = self._mouse_smooth * x + (1 - self._mouse_smooth) * self._last_mouse_x
-            y = self._mouse_smooth * y + (1 - self._mouse_smooth) * self._last_mouse_y
-
-        self._last_mouse_x = x
-        self._last_mouse_y = y
 
         try:
             pyautogui.moveTo(int(x), int(y), duration=0)

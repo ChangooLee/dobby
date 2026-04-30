@@ -1441,12 +1441,15 @@ function drawHand(landmarks, label, W, H) {
 
 // ── Index finger pointer ──────────────────────────────────
 let pointerSmooth = null;
-const POINTER_SMOOTH_ALPHA = 0.4;
+const POINTER_SMOOTH_ALPHA = 0.65;
+let lastPointerX = 0;
+let lastPointerY = 0;
 
 // 핀치 상태
 let pinchActive = false;
 let pinchStart = 0;
-let pinchHoldFired = false;
+let pinchDragFired = false;
+let pinchTypeFired = false;
 let pinchDragActive = false;
 let typeModeActive = false;
 
@@ -1490,7 +1493,9 @@ function moveMouseToIndexTip(landmarks) {
     pointerSmooth.x = POINTER_SMOOTH_ALPHA * rawX + (1 - POINTER_SMOOTH_ALPHA) * pointerSmooth.x;
     pointerSmooth.y = POINTER_SMOOTH_ALPHA * rawY + (1 - POINTER_SMOOTH_ALPHA) * pointerSmooth.y;
   }
-  sendMotionEvent('motion.mouse.move', { x: Math.round(pointerSmooth.x), y: Math.round(pointerSmooth.y) });
+  lastPointerX = Math.round(pointerSmooth.x);
+  lastPointerY = Math.round(pointerSmooth.y);
+  sendMotionEvent('motion.mouse.move', { x: lastPointerX, y: lastPointerY });
 }
 
 function getPinchDist(landmarks) {
@@ -1507,21 +1512,24 @@ function checkPinchGesture(landmarks, px, py) {
     if (!pinchActive) {
       pinchActive = true;
       pinchStart = now;
-      pinchHoldFired = false;
+      pinchDragFired = false;
+      pinchTypeFired = false;
     } else {
       const held = now - pinchStart;
-      if (!pinchHoldFired) {
-        if (held >= CONFIG.PINCH_TYPE_MS) {
-          // 1.5초 이상 — 음성 입력 모드
-          pinchHoldFired = true;
-          activateTypeMode();
-        } else if (held >= CONFIG.PINCH_HOLD_MS) {
-          // 0.6초 이상 — 드래그 시작
-          pinchHoldFired = true;
-          pinchDragActive = true;
-          sendMotionEvent('motion.mouse.button_down', { x: px, y: py });
-          showGesture('👆 드래그', 600);
+      if (!pinchTypeFired && held >= CONFIG.PINCH_TYPE_MS) {
+        // 1.5초 이상 — 음성 입력 모드 (드래그 중이면 먼저 해제)
+        pinchTypeFired = true;
+        if (pinchDragActive) {
+          pinchDragActive = false;
+          sendMotionEvent('motion.mouse.button_up', { x: px, y: py });
         }
+        activateTypeMode();
+      } else if (!pinchDragFired && held >= CONFIG.PINCH_HOLD_MS) {
+        // 0.6초 이상 — 드래그 시작
+        pinchDragFired = true;
+        pinchDragActive = true;
+        sendMotionEvent('motion.mouse.button_down', { x: px, y: py });
+        showGesture('👆 드래그', 600);
       }
     }
   } else {
@@ -1531,7 +1539,7 @@ function checkPinchGesture(landmarks, px, py) {
         pinchDragActive = false;
         sendMotionEvent('motion.mouse.button_up', { x: px, y: py });
         showGesture('✓ 드래그 완료', 600);
-      } else if (!pinchHoldFired && held < CONFIG.PINCH_CLICK_MAX_MS) {
+      } else if (!pinchDragFired && !pinchTypeFired && held < CONFIG.PINCH_CLICK_MAX_MS) {
         if (typeModeActive) {
           // 타입 모드 중 클릭 = 종료
           deactivateTypeMode();
@@ -1541,7 +1549,8 @@ function checkPinchGesture(landmarks, px, py) {
         }
       }
       pinchActive = false;
-      pinchHoldFired = false;
+      pinchDragFired = false;
+      pinchTypeFired = false;
     }
   }
 }
@@ -1702,21 +1711,20 @@ function onHandsResults(results) {
       }
     }
     if (rightHandLandmarks && isPointingGesture(rightHandLandmarks)) {
-      moveMouseToIndexTip(rightHandLandmarks); // pointerSmooth 먼저 업데이트
+      moveMouseToIndexTip(rightHandLandmarks); // pointerSmooth + lastPointerX/Y 업데이트
       drawIndexPointer(rightHandLandmarks, W, H);
-      if (pointerSmooth) {
-        checkPinchGesture(rightHandLandmarks, Math.round(pointerSmooth.x), Math.round(pointerSmooth.y));
-      }
+      checkPinchGesture(rightHandLandmarks, lastPointerX, lastPointerY);
+    } else if (rightHandLandmarks && pinchActive) {
+      // 핀치 중 검지가 살짝 굽어도 마지막 위치로 계속 감지
+      checkPinchGesture(rightHandLandmarks, lastPointerX, lastPointerY);
     } else {
-      if (pinchActive || pinchDragActive) {
-        // 포인팅 제스처 해제 → 핀치 강제 취소
-        if (pinchDragActive) {
-          pinchDragActive = false;
-          sendMotionEvent('motion.mouse.button_up', {});
-        }
-        pinchActive = false;
-        pinchHoldFired = false;
+      if (pinchDragActive) {
+        pinchDragActive = false;
+        sendMotionEvent('motion.mouse.button_up', {});
       }
+      pinchActive = false;
+      pinchDragFired = false;
+      pinchTypeFired = false;
       pointerSmooth = null;
     }
   }
