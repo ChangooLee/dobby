@@ -1857,6 +1857,15 @@ async def hud_context():
 
 
 _whisper_model = None
+_whisper_executor = None  # lazy ThreadPoolExecutor (max_workers=1)
+
+
+def _get_whisper_executor():
+    global _whisper_executor
+    if _whisper_executor is None:
+        from concurrent.futures import ThreadPoolExecutor
+        _whisper_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="whisper")
+    return _whisper_executor
 
 def _get_whisper():
     global _whisper_model
@@ -1876,14 +1885,20 @@ async def stt_endpoint(audio: UploadFile = File(...)):
             tmp_path = tmp.name
         try:
             model = _get_whisper()
-            segments, _ = model.transcribe(
-                tmp_path,
-                language="ko",
-                beam_size=5,
-                vad_filter=False,
-                initial_prompt="도비야, 데스크톱 열어줘. 오늘 일정 알려줘. 클로드 코드 실행해줘.",
-                no_speech_threshold=0.6,
-            )
+            loop = asyncio.get_event_loop()
+
+            def _transcribe():
+                segs, _ = model.transcribe(
+                    tmp_path,
+                    language="ko",
+                    beam_size=5,
+                    vad_filter=False,
+                    initial_prompt="도비야, 데스크톱 열어줘. 오늘 일정 알려줘. 클로드 코드 실행해줘.",
+                    no_speech_threshold=0.6,
+                )
+                return list(segs)  # generator를 thread 안에서 소비
+
+            segments = await loop.run_in_executor(_get_whisper_executor(), _transcribe)
             _HALLUCINATIONS = {"구독과 좋아요", "시청해 주셔서 감사합니다", "구독", "좋아요", "MBC", "KBS", "SBS"}
             parts = [s.text for s in segments if s.no_speech_prob < 0.6]
             text = " ".join(parts).strip()

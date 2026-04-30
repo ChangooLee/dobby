@@ -1483,6 +1483,9 @@ function drawIndexPointer(landmarks, W, H) {
   ctx.restore();
 }
 
+let _lastMoveSent = 0;
+const MOVE_INTERVAL_MS = 33; // ~30fps → 이미 충분, WS 부하 줄이려면 50(20fps)도 가능
+
 function moveMouseToIndexTip(landmarks) {
   const tip = landmarks[LM.INDEX_TIP];
   const rawX = (1 - tip.x) * screenW;
@@ -1495,7 +1498,11 @@ function moveMouseToIndexTip(landmarks) {
   }
   lastPointerX = Math.round(pointerSmooth.x);
   lastPointerY = Math.round(pointerSmooth.y);
-  sendMotionEvent('motion.mouse.move', { x: lastPointerX, y: lastPointerY });
+  const now = Date.now();
+  if (now - _lastMoveSent >= MOVE_INTERVAL_MS) {
+    _lastMoveSent = now;
+    sendMotionEvent('motion.mouse.move', { x: lastPointerX, y: lastPointerY });
+  }
 }
 
 function getPinchDist(landmarks) {

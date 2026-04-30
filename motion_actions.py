@@ -380,8 +380,9 @@ class MotionController:
         text = payload.get("text", "").strip()
         if not text:
             return None
-        import subprocess, time
-        try:
+        import asyncio, subprocess, time
+
+        def _do_type():
             from pynput.keyboard import Key, Controller as KbdCtrl
             subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
             time.sleep(0.05)
@@ -390,6 +391,10 @@ class MotionController:
             kbd.press('v')
             kbd.release('v')
             kbd.release(Key.cmd)
+
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _do_type)
             log.info(f"Typed via clipboard: {text!r}")
         except Exception as e:
             log.warning(f"Type error: {e}")
