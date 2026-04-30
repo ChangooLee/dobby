@@ -43,6 +43,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from actions import execute_action, monitor_build, open_terminal, open_browser, open_claude_in_project, _generate_project_name, prompt_existing_terminal, get_active_claude_sessions_summary
+import project_sessions as _proj_sessions
 from work_mode import WorkSession, is_casual_question
 from screen import get_active_windows, take_screenshot, describe_screen, format_windows_for_context
 from calendar_access import get_todays_events, get_upcoming_events, get_next_event, format_events_for_context, format_schedule_summary, refresh_cache as refresh_calendar_cache
@@ -75,6 +76,10 @@ QWEN3_TTS_URL   = os.getenv("QWEN3_TTS_URL", "").rstrip("/")
 QWEN3_TTS_KEY   = os.getenv("QWEN3_TTS_KEY", "")
 QWEN3_TTS_VOICE = os.getenv("QWEN3_TTS_VOICE", "serena")
 QWEN3_TTS_MODEL = os.getenv("QWEN3_TTS_MODEL", "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-bf16")
+
+# Fish Audio TTS
+FISH_API_KEY   = os.getenv("FISH_API_KEY", "")
+FISH_VOICE_ID  = os.getenv("FISH_VOICE_ID", "")
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DESKTOP_PATH = Path.home() / "Desktop"
@@ -1345,6 +1350,30 @@ async def _tts_qwen3(text: str) -> Optional[bytes]:
         return None
 
 
+async def _tts_fish(text: str) -> Optional[bytes]:
+    """Fish Audio TTS → MP3 bytes."""
+    if not FISH_API_KEY or not FISH_VOICE_ID:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                "https://api.fish.audio/v1/tts",
+                headers={"Authorization": f"Bearer {FISH_API_KEY}"},
+                json={"text": text, "reference_id": FISH_VOICE_ID, "format": "mp3"},
+            )
+        if resp.status_code != 200:
+            log.warning(f"Fish Audio TTS HTTP {resp.status_code}")
+            return None
+        raw = resp.content
+        if len(raw) < 100:
+            return None
+        log.info(f"Fish Audio TTS: {len(raw)} bytes")
+        return raw
+    except Exception as e:
+        log.warning(f"Fish Audio TTS error: {e}")
+        return None
+
+
 async def _tts_say(text: str) -> Optional[bytes]:
     """macOS say + afconvert → WAV bytes (fallback)."""
     aiff_path = tempfile.mktemp(suffix=".aiff")
@@ -1359,7 +1388,8 @@ async def _tts_say(text: str) -> Optional[bytes]:
         if proc.returncode != 0:
             return None
         conv = await asyncio.create_subprocess_exec(
-            "afconvert", aiff_path, "-o", wav_path, "-f", "WAVE", "-d", "LEI16",
+            "afconvert", aiff_path, "-o", wav_path,
+            "-f", "WAVE", "-d", "LEI16@22050", "-c", "1",
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
@@ -1383,14 +1413,19 @@ async def _tts_say(text: str) -> Optional[bytes]:
 
 
 async def synthesize_speech(text: str) -> Optional[bytes]:
-    """Qwen3 TTS 우선, 실패 시 macOS say 폴백."""
+    """Qwen3 TTS → Fish Audio → macOS say 순서로 폴백."""
     _session_tokens["tts_calls"] += 1
     _append_usage_entry(0, 0, "tts")
 
     audio = await _tts_qwen3(text)
     if audio:
         return audio
-    log.info("Qwen3 TTS 실패 — say 폴백")
+
+    audio = await _tts_fish(text)
+    if audio:
+        return audio
+
+    log.info("모든 TTS 실패 — say 폴백")
     return await _tts_say(text)
 
 
@@ -3005,7 +3040,9 @@ async def voice_handler(ws: WebSocket):
                                         if not _dir:
                                             msg = f"{_name} 프로젝트를 찾지 못했습니다, 주인님."
                                         else:
+                                            # 시각적 터미널 + 세션 동시 초기화
                                             result = await open_claude_in_project(_dir, "")
+                                            await _proj_sessions.open_session(_name, _dir)
                                             msg = result.get("confirmation", f"{_name} Claude Code를 열었습니다, 주인님.")
                                         audio = await synthesize_speech(msg)
                                         if audio and _ws:
@@ -3022,14 +3059,52 @@ async def voice_handler(ws: WebSocket):
                                     async def _do_type_to_claude(_name=proj_name, _msg=msg_to_type, _ws=ws):
                                         if not _msg:
                                             return
-                                        result = await prompt_existing_terminal(_name, _msg)
-                                        confirmation = result.get("confirmation", f"{_name}에 전달했습니다, 주인님.")
-                                        audio = await synthesize_speech(confirmation)
-                                        if audio and _ws:
+                                        proj_dir = _find_project_dir(_name)
+                                        if not proj_dir:
+                                            msg = f"{_name} 프로젝트를 찾지 못했습니다, 주인님."
+                                            audio = await synthesize_speech(msg)
+                                            if audio and _ws:
+                                                try:
+                                                    await _ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": msg})
+                                                except Exception:
+                                                    pass
+                                            return
+                                        # 시각 터미널에 붙여넣기 (fire-and-forget)
+                                        asyncio.create_task(prompt_existing_terminal(_name, _msg))
+                                        # 세션에서 응답 캡처
+                                        full_response = await _proj_sessions.send(_name, proj_dir, _msg)
+                                        # 음성용 요약
+                                        try:
+                                            if anthropic_client and len(full_response) > 80:
+                                                summary = await anthropic_client.messages.create(
+                                                    model="claude-haiku-4-5-20251001",
+                                                    max_tokens=150,
+                                                    system=(
+                                                        "You are DOBBY summarizing a Claude Code response. "
+                                                        "Always respond in Korean (한국어). "
+                                                        "1-2 sentences, spoken Korean, no markdown, no URLs. "
+                                                        "Start with '주인님, [프로젝트명]에서...'"
+                                                    ),
+                                                    messages=[{"role": "user", "content": f"Project: {_name}\nResponse:\n{full_response[:2000]}"}],
+                                                )
+                                                msg = summary.content[0].text
+                                            else:
+                                                msg = full_response[:300] if full_response else f"{_name}에서 응답이 없습니다, 주인님."
+                                        except Exception:
+                                            msg = f"주인님, {_name}에서: {full_response[:200]}"
+                                        if _ws:
                                             try:
-                                                await _ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": confirmation})
-                                            except Exception:
-                                                pass
+                                                audio = await synthesize_speech(strip_markdown_for_tts(msg))
+                                                await _ws.send_json({"type": "status", "state": "thinking"})
+                                                await _ws.send_json({"type": "status", "state": "speaking"})
+                                                if audio:
+                                                    await _ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": msg})
+                                                else:
+                                                    await _ws.send_json({"type": "text", "text": msg})
+                                                await _ws.send_json({"type": "status", "state": "idle"})
+                                                log.info(f"TYPE_TO_CLAUDE [{_name}]: {msg[:80]}")
+                                            except Exception as e:
+                                                log.error(f"TYPE_TO_CLAUDE send failed: {e}")
                                     asyncio.create_task(_do_type_to_claude())
 
                 # Update history
@@ -3343,5 +3418,6 @@ if __name__ == "__main__":
         port=args.port,
         reload=args.reload,
         log_level="info",
+        ws_max_size=16 * 1024 * 1024,  # 16MB — large enough for any TTS audio
         **ssl_kwargs,
     )
