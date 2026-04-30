@@ -44,7 +44,7 @@ class MotionController:
 
         # Rate limiting
         self._last_click_time = 0.0
-        self._click_debounce = 0.5  # seconds
+        self._click_debounce = 0.2  # seconds
         self._last_scroll_time = 0.0
         self._scroll_throttle = 0.05  # seconds
 

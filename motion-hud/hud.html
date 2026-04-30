@@ -1531,7 +1531,11 @@ function checkPinchGesture(landmarks, px, py) {
       if (!pinchTypeFired && held < CONFIG.PINCH_CLICK_MAX_MS) {
         if (typeModeActive) {
           // type mode 활성화 직후 1000ms 내 클릭은 무시 (핀치 해제 바운스 방지)
-          if (Date.now() - typeModeActivatedAt > 1000) deactivateTypeMode();
+          if (Date.now() - typeModeActivatedAt > 1000) {
+            deactivateTypeMode();
+            // 종료 클릭을 그대로 대상 창에도 전달 — 두 번 클릭할 필요 없음
+            sendMotionEvent('motion.mouse.left_click', { x: px, y: py });
+          }
         } else {
           console.log('[PINCH] click held=' + held + 'ms px=' + px + ' py=' + py);
           sendMotionEvent('motion.mouse.left_click', { x: px, y: py });
@@ -1556,6 +1560,7 @@ function activateTypeMode() {
 function deactivateTypeMode() {
   typeModeActive = false;
   wakeActive = false;
+  lastPointingTime = Date.now(); // 종료 직후 클릭 grace period 확보
   showGesture('✍ 입력 종료', 800);
   console.log('[TYPE MODE] deactivated');
 }
