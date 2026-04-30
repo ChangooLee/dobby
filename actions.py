@@ -169,15 +169,13 @@ async def open_claude_in_project(
     prompt: str,
     bin_path: str = None,
     project_name: str = None,
-    desktop_index: int = None,
+    desktop_index: int = None,   # 명시적 지정 (없으면 desktop_manager.assign_space)
     desktop_manager=None,
 ) -> dict:
-    """Switch to the project's designated Space, then open Claude Code in iTerm2.
+    """Space 배정 → 전환 → tmux 세션 생성 → iTerm2 창 열기.
 
-    Flow:
-      1. yabai: switch to desktop_index (if provided) — exact, no drift
-      2. tmux: create/reuse named session 'dobby_<project>'
-      3. iTerm2: open window attached to that tmux session (opens on current Space)
+    desktop_manager가 있으면 자동으로 올바른 Space에 창을 엽니다.
+    desktops.yaml에 없는 프로젝트는 빈 Space에 동적 배정합니다.
     """
     import tmux_session as _tmux
     from pathlib import Path as _Path
@@ -186,11 +184,12 @@ async def open_claude_in_project(
     if not project_name:
         project_name = _Path(project_dir).name
 
-    # Step 1: switch Space first so the iTerm2 window opens on the right desktop
-    if desktop_index and desktop_manager:
-        switched = await desktop_manager.switch_to(desktop_index)
+    # Step 1: Space 결정 (명시 > config 조회 > 자동 배정) 후 이동
+    if desktop_manager:
+        space = desktop_index or await desktop_manager.assign_space(project_name, project_dir)
+        switched = await desktop_manager.switch_to(space)
         if not switched:
-            log.warning(f"Space {desktop_index} switch failed, continuing anyway")
+            log.warning(f"Space {space} switch failed, continuing anyway")
 
     # Step 2: tmux session (background, survives iTerm2 close)
     ok = await _tmux.open_session(project_name, project_dir)
@@ -204,9 +203,10 @@ async def open_claude_in_project(
     await _tmux.attach_in_terminal(project_name)
 
     log.info(f"Opened Claude Code for '{project_name}' on Space {desktop_index}")
+    used_space = space if desktop_manager else desktop_index
     return {
         "success": True,
-        "confirmation": f"{project_name} Claude Code를 {f'{desktop_index}번 데스크톱에 ' if desktop_index else ''}열었습니다, 주인님.",
+        "confirmation": f"{project_name} Claude Code를 {f'Space {used_space}에 ' if used_space else ''}열었습니다, 주인님.",
     }
 
 

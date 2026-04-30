@@ -257,6 +257,13 @@ ACTIVE DESKTOP: {active_desktop}
 - 사용자가 프로젝트명을 명시하지 않고 "수정해", "이거 봐줘", "작업해줘" 등 명령하면 → 현재 활성 데스크톱의 프로젝트에 TYPE_TO_CLAUDE 사용.
 - 데스크톱 스와이프 후 컨텍스트가 자동으로 업데이트된다.
 
+DESKTOP STATUS (전체 Space 현황):
+{desktop_status}
+- ✅ Claude Code 실행 중 = tmux 세션 살아있음. TYPE_TO_CLAUDE로 명령 전달 가능.
+- 🪟 창만 있음 = iTerm2 창은 있지만 Claude Code 세션 없음. OPEN_CLAUDE로 재시작.
+- ❌ 비어있음 = 아무것도 없음. OPEN_CLAUDE로 열어야 함.
+- 새 프로젝트 열기 요청 시 DOBBY가 자동으로 빈 Space를 찾아 배정한다.
+
 ACTIVE CLAUDE CODE SESSIONS: {active_claude_sessions}
 - 위 목록에 있는 프로젝트는 이미 Terminal에서 Claude Code 세션이 열려 있음.
 - 열려 있는 프로젝트에 명령을 전달할 때는 OPEN_CLAUDE 대신 TYPE_TO_CLAUDE 사용.
@@ -1471,6 +1478,12 @@ async def generate_response(
     else:
         active_desktop_str = f"데스크톱 {desktop_manager.active_index} (매핑 없음)"
 
+    # Desktop status: live Space → project → tmux session status
+    try:
+        desktop_status_str = await desktop_manager.format_status()
+    except Exception:
+        desktop_status_str = "  (조회 실패)"
+
     system = DOBBY_SYSTEM_PROMPT.format(
         current_time=current_time,
         weather_info=weather_info,
@@ -1484,6 +1497,7 @@ async def generate_response(
         project_dir=PROJECT_DIR,
         motion_status=motion_status_str,
         active_desktop=active_desktop_str,
+        desktop_status=desktop_status_str,
         active_claude_sessions=get_active_claude_sessions_summary(),
     )
     if lookup_status:
@@ -1972,6 +1986,13 @@ async def system_stats():
         }
     except Exception:
         return {"cpu": None, "ram": None, "battery": None, "charging": None}
+
+
+@app.get("/api/desktop/status")
+async def desktop_status_endpoint():
+    """각 Space의 프로젝트 및 Claude Code 세션 상태 반환."""
+    rows = await desktop_manager.get_space_status()
+    return {"spaces": rows, "formatted": await desktop_manager.format_status()}
 
 
 @app.get("/api/claude/status")
