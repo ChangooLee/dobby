@@ -3082,23 +3082,59 @@ async def voice_handler(ws: WebSocket):
                                             return
                                         if not _find_project_dir(_name):
                                             msg = f"{_name} 프로젝트를 찾지 못했습니다, 주인님."
+                                            audio = await synthesize_speech(msg)
+                                            if audio and _ws:
+                                                try:
+                                                    await _ws.send_json({"type": "status", "state": "speaking"})
+                                                    await _ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": msg})
+                                                    await _ws.send_json({"type": "status", "state": "idle"})
+                                                except Exception:
+                                                    pass
+                                            return
+                                        import tmux_session as _tmux_mod
+                                        if await _tmux_mod.is_alive(_name):
+                                            # tmux 세션 있음 → send-keys + capture
+                                            if _ws:
+                                                try:
+                                                    await _ws.send_json({"type": "status", "state": "thinking"})
+                                                except Exception:
+                                                    pass
+                                            full_response = await _tmux_mod.send_and_capture(_name, _msg)
                                         else:
-                                            # 인터랙티브 Claude Code 세션에 클립보드로 직접 입력
-                                            result = await prompt_existing_terminal(_name, _msg)
-                                            if result.get("success"):
-                                                msg = f"{_name}에 전달했습니다, 주인님. 해당 터미널을 확인해 주세요."
+                                            # tmux 없음 → 클립보드 붙여넣기 폴백
+                                            await prompt_existing_terminal(_name, _msg)
+                                            full_response = ""
+                                        # 음성용 요약
+                                        try:
+                                            if anthropic_client and len(full_response) > 80:
+                                                summary = await anthropic_client.messages.create(
+                                                    model="claude-haiku-4-5-20251001",
+                                                    max_tokens=150,
+                                                    system=(
+                                                        "You are DOBBY summarizing a Claude Code response. "
+                                                        "Always respond in Korean (한국어). "
+                                                        "1-2 sentences, spoken Korean, no markdown, no URLs. "
+                                                        "Start with '주인님, [프로젝트명]에서...'"
+                                                    ),
+                                                    messages=[{"role": "user", "content": f"Project: {_name}\nResponse:\n{full_response[:2000]}"}],
+                                                )
+                                                msg = summary.content[0].text
+                                            elif full_response:
+                                                msg = f"주인님, {_name}에서: {full_response[:200]}"
                                             else:
-                                                msg = result.get("confirmation", f"{_name} 터미널에 접근하지 못했습니다, 주인님.")
-                                        audio = await synthesize_speech(msg)
+                                                msg = f"{_name}에 전달했습니다, 주인님. 터미널을 확인해 주세요."
+                                        except Exception:
+                                            msg = f"주인님, {_name}에 전달했습니다."
                                         if _ws:
                                             try:
+                                                audio = await synthesize_speech(strip_markdown_for_tts(msg))
                                                 await _ws.send_json({"type": "status", "state": "speaking"})
                                                 if audio:
                                                     await _ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": msg})
                                                 else:
                                                     await _ws.send_json({"type": "text", "text": msg})
                                                 await _ws.send_json({"type": "status", "state": "idle"})
-                                                log.info(f"TYPE_TO_CLAUDE [{_name}]: {msg}")
+                                                log.info(f"TYPE_TO_CLAUDE [{_name}]: {msg[:80]}")
                                             except Exception as e:
                                                 log.error(f"TYPE_TO_CLAUDE send failed: {e}")
                                     asyncio.create_task(_do_type_to_claude())

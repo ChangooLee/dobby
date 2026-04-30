@@ -165,86 +165,30 @@ async def open_chrome(url: str) -> dict:
 
 
 async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = None, project_name: str = None) -> dict:
-    """Open Terminal and start an interactive Claude Code session (claude -c).
+    """Open Claude Code in a tmux session displayed in iTerm2 (or Terminal.app).
 
-    Uses 'claude -c --dangerously-skip-permissions' which continues the most
-    recent session for that directory — equivalent to --resume but fully
-    automated (no interactive picker).
+    Creates a named tmux session 'dobby_<project>' running
+    'claude --resume --dangerously-skip-permissions', then attaches it
+    in iTerm2 so the user sees the full interactive TUI.
     """
-    import shutil as _shutil
+    import tmux_session as _tmux
     from pathlib import Path as _Path
 
     project_dir = str(_Path(project_dir).expanduser().resolve())
     if not project_name:
         project_name = _Path(project_dir).name
+
+    ok = await _tmux.open_session(project_name, project_dir)
+    if not ok:
+        return {
+            "success": False,
+            "confirmation": "tmux 세션 시작에 실패했습니다, 주인님. claude가 설치되어 있는지 확인해 주세요.",
+        }
+
+    await _tmux.attach_in_terminal(project_name)
+
     proj_key = project_name.lower().strip().replace(" ", "_").replace("-", "_")
-
-    if not bin_path:
-        bin_path = (
-            os.getenv("CLAUDE_BIN")
-            or _shutil.which("claude")
-            or next(
-                (p for p in [
-                    "/opt/homebrew/bin/claude",
-                    "/usr/local/bin/claude",
-                    str(_Path.home() / ".npm-global" / "bin" / "claude"),
-                    str(_Path.home() / ".local" / "bin" / "claude"),
-                    str(_Path.home() / "bin" / "claude"),
-                ] if _Path(p).exists()),
-                None
-            )
-        )
-    if not bin_path:
-        return {
-            "success": False,
-            "confirmation": "Claude Code 실행 파일을 찾지 못했습니다. `which claude` 결과를 확인한 뒤 CLAUDE_BIN 환경 변수에 등록해 주세요.",
-        }
-
-    safe_dir = project_dir.replace("\\", "\\\\").replace('"', '\\"')
-    safe_bin = bin_path.replace("\\", "\\\\").replace('"', '\\"')
-
-    # claude -c : continue most recent session (interactive TUI, not print mode)
-    open_script = (
-        'tell application "Terminal"\n'
-        "    activate\n"
-        f'    do script "cd " & quoted form of "{safe_dir}" & " && {safe_bin} -c --dangerously-skip-permissions"\n'
-        "end tell"
-    )
-    proc = await asyncio.create_subprocess_exec(
-        "osascript", "-e", open_script,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    _, stderr = await proc.communicate()
-    success = proc.returncode == 0
-    if not success:
-        log.error(f"open_claude_in_project failed: {stderr.decode()[:200]}")
-        return {
-            "success": False,
-            "confirmation": f"Claude Code 실행에 실패했습니다, 주인님: {stderr.decode()[:100]}",
-        }
-
-    await _mark_terminal_as_dobby()
-
-    # Capture front window id so TYPE_TO_CLAUDE can find the window later
-    id_script = (
-        'tell application "Terminal"\n'
-        "    delay 0.4\n"
-        "    return (id of front window) as text\n"
-        "end tell"
-    )
-    id_proc = await asyncio.create_subprocess_exec(
-        "osascript", "-e", id_script,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    id_stdout, _ = await id_proc.communicate()
-    try:
-        wid = int(id_stdout.decode().strip())
-        _claude_session_windows[proj_key] = wid
-        log.info(f"Opened Claude Code for '{proj_key}' (interactive), Terminal window id={wid}")
-    except (ValueError, TypeError):
-        log.warning(f"Window ID 캡처 실패 (세션은 열림): {id_stdout.decode()!r}")
+    log.info(f"Opened Claude Code for '{proj_key}' in tmux session")
 
     return {
         "success": True,
