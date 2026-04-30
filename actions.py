@@ -196,32 +196,48 @@ async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = 
     safe_dir = project_dir.replace("\\", "\\\\").replace('"', '\\"')
     safe_bin = bin_path.replace("\\", "\\\\").replace('"', '\\"')
 
-    # Open Terminal and return the new window's id for reliable targeting later
-    script = (
+    # 1단계: Terminal에서 Claude Code 실행
+    open_script = (
         'tell application "Terminal"\n'
         "    activate\n"
-        f'    set newTab to do script "cd " & quoted form of "{safe_dir}" & " && clear && echo \'◈ DOBBY Claude Code Session\' && {safe_bin} --dangerously-skip-permissions"\n'
-        "    delay 0.3\n"
-        "    return (id of window of newTab) as string\n"
+        f'    do script "cd " & quoted form of "{safe_dir}" & " && clear && echo \'◈ DOBBY Claude Code Session\' && {safe_bin} --dangerously-skip-permissions"\n'
         "end tell"
     )
     proc = await asyncio.create_subprocess_exec(
-        "osascript", "-e", script,
+        "osascript", "-e", open_script,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await proc.communicate()
+    _, stderr = await proc.communicate()
     success = proc.returncode == 0
-    if success:
-        try:
-            wid = int(stdout.decode().strip())
-            _claude_session_windows[project_key] = wid
-            log.info(f"Opened Claude Code for '{project_key}', Terminal window id={wid}")
-        except (ValueError, TypeError):
-            log.warning(f"Could not parse Terminal window id: {stdout.decode()!r}")
-        await _mark_terminal_as_dobby()
-    else:
+    if not success:
         log.error(f"open_claude_in_project failed: {stderr.decode()[:200]}")
+        return {
+            "success": False,
+            "confirmation": f"Claude Code 실행에 실패했습니다, 주인님: {stderr.decode()[:100]}",
+        }
+
+    await _mark_terminal_as_dobby()
+
+    # 2단계: front window id 캡처 (실패해도 세션 오픈은 성공으로 처리)
+    id_script = (
+        'tell application "Terminal"\n'
+        "    delay 0.4\n"
+        "    return (id of front window) as text\n"
+        "end tell"
+    )
+    id_proc = await asyncio.create_subprocess_exec(
+        "osascript", "-e", id_script,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    id_stdout, _ = await id_proc.communicate()
+    try:
+        wid = int(id_stdout.decode().strip())
+        _claude_session_windows[project_key] = wid
+        log.info(f"Opened Claude Code for '{project_key}', Terminal window id={wid}")
+    except (ValueError, TypeError):
+        log.warning(f"Window ID 캡처 실패 (세션은 열림): {id_stdout.decode()!r}")
     return {
         "success": success,
         "confirmation": "Claude Code를 터미널에서 실행했습니다, 주인님."
