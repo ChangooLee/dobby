@@ -636,9 +636,10 @@ const CONFIG = {
   VOICE_WS_URL:  'wss://localhost:8340/ws/voice',
   WS_RECONNECT_DELAY: 3000,
 
-  // 제스처 임계값
-  SWIPE_VELOCITY: 0.50,
-  SWIPE_DISTANCE: 0.25,
+  // 제스처 임계값 (손목 스냅)
+  SNAP_PEAK_VELOCITY: 1.0,  // 순간 최대 속도 (normalized/s)
+  SNAP_MAX_DURATION: 350,   // 스냅 인식 창 (ms)
+  SNAP_MIN_DISTANCE: 0.015,  // 최소 이동 거리 (normalized)
   SWIPE_DEBOUNCE_MS: 800,
 
   // 손 추적
@@ -1704,20 +1705,26 @@ function detectSwipeGestures(handMap) {
 }
 
 
-// ── Swipe detection ───────────────────────────────────────
+// ── Swipe detection (손목 스냅) ───────────────────────────
 function detectSwipe(history, now) {
-  if (history.length < 4) return null;
-  const cutoff = now - 600;
-  const recent = history.filter(p => p.t >= cutoff);
+  if (history.length < 3) return null;
+  const recent = history.filter(p => p.t >= now - CONFIG.SNAP_MAX_DURATION);
   if (recent.length < 3) return null;
-  const first = recent[0], last = recent[recent.length - 1];
-  const dt = last.t - first.t;
-  if (dt < 60) return null;
-  const dx = last.x - first.x, dy = last.y - first.y;
-  const velocity = Math.abs(dx) / (dt / 1000);
-  if (Math.abs(dx) < CONFIG.SWIPE_DISTANCE) return null;
-  if (velocity < CONFIG.SWIPE_VELOCITY) return null;
-  dbg.lastSwipeDx = dx; dbg.lastSwipeVelocity = velocity;
+
+  let peakVx = 0;
+  for (let i = 1; i < recent.length; i++) {
+    const dt = recent[i].t - recent[i - 1].t;
+    if (dt < 8) continue;
+    const vx = (recent[i].x - recent[i - 1].x) / (dt / 1000);
+    if (Math.abs(vx) > Math.abs(peakVx)) peakVx = vx;
+  }
+
+  const dx = recent[recent.length - 1].x - recent[0].x;
+  if (Math.abs(peakVx) < CONFIG.SNAP_PEAK_VELOCITY) return null;
+  if (Math.abs(dx) < CONFIG.SNAP_MIN_DISTANCE) return null;
+  if (Math.sign(dx) !== Math.sign(peakVx)) return null;
+
+  dbg.lastSwipeDx = dx; dbg.lastSwipeVelocity = peakVx;
   dbg.lastSwipeDir = dx > 0 ? 'right' : 'left';
   return dx > 0 ? 'right' : 'left';
 }
