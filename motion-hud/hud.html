@@ -716,8 +716,15 @@ let activeDesktopName = '';
 // Voice state
 let voiceState = 'idle';     // idle | listening | thinking | speaking
 let speechEnabled = true;    // V-sign toggle
-let recognition = null;
 let recognitionRunning = false;
+
+// STT (MediaRecorder + faster-whisper)
+let micStream = null;
+let vadRecorder = null;
+let _chunkBusy = false;
+const STT_CHUNK_MS = 2500;
+let wakeActive = false;
+let wakeTimer = null;
 
 // Audio
 let audioCtx = null;
@@ -1082,7 +1089,7 @@ function connectVoiceWS() {
       voiceWSConnected = true;
       console.log('[HUD] Voice WS connected');
       setVoiceState('listening');
-      if (!recognition) { initRecognition(); startRecognition(); }
+      if (!micStream) initRecognition();
     };
     voiceWS.onmessage = (e) => {
       if (e.data instanceof Blob) return;
@@ -1120,62 +1127,104 @@ function sendTranscript(text, isFinal) {
   } catch {}
 }
 
-// ── Web Speech API ────────────────────────────────────────
-function initRecognition() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { console.warn('[HUD] SpeechRecognition 미지원'); speechEnabled = false; return; }
-  recognition = new SR();
-  recognition.lang = 'ko-KR';
-  recognition.continuous = true;
-  recognition.interimResults = true;
+// ── STT (MediaRecorder + faster-whisper) ─────────────────
+async function initRecognition() {
+  if (micStream) return;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false,
+    });
+  } catch (e) {
+    console.warn('[HUD] Mic 접근 거부:', e);
+    speechEnabled = false;
+    return;
+  }
+  recognitionRunning = true;
+  _runChunk();
+}
 
-  recognition.onresult = (event) => {
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const result = event.results[i];
-      const text = result[0].transcript.trim();
-      if (!text) continue;
-      if (result.isFinal) {
-        if (isPlayingAudio) {
-          stopAudio();
-          console.log('[BARGE-IN]', text);
-        }
-        addTranscript('user', text);
-        sendTranscript(text, true);
-        setVoiceState('thinking');
-      }
-    }
+function _runChunk() {
+  if (_chunkBusy) return;
+  if (!speechEnabled || !micStream) { recognitionRunning = false; return; }
+  // thinking 중엔 블락. speaking 중엔 barge-in 위해 계속 녹음
+  if (voiceState === 'thinking') { setTimeout(_runChunk, 300); return; }
+  _chunkBusy = true;
+  if (!isPlayingAudio) setVoiceState('listening');
+  let rec;
+  try {
+    rec = new MediaRecorder(micStream, { mimeType: 'audio/webm;codecs=opus' });
+  } catch {
+    _chunkBusy = false;
+    setTimeout(_runChunk, 1000);
+    return;
+  }
+  const parts = [];
+  rec.ondataavailable = e => { if (e.data.size > 0) parts.push(e.data); };
+  rec.onstop = () => {
+    _chunkBusy = false;
+    const blob = new Blob(parts, { type: 'audio/webm' });
+    if (blob.size > 1000) sendAudioToSTT(blob);
+    if (speechEnabled) setTimeout(_runChunk, 80);
+    else { recognitionRunning = false; if (voiceState === 'listening') setVoiceState('idle'); }
   };
+  rec.onerror = () => { _chunkBusy = false; setTimeout(_runChunk, 500); };
+  rec.start();
+  setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, STT_CHUNK_MS);
+  vadRecorder = rec;
+}
 
-  recognition.onend = () => {
-    recognitionRunning = false;
-    if (speechEnabled && voiceState !== 'thinking') {
-      setTimeout(startRecognition, 300);
+async function sendAudioToSTT(blob) {
+  try {
+    const form = new FormData();
+    form.append('audio', blob, 'audio.webm');
+    const resp = await fetch('https://localhost:8340/api/stt', { method: 'POST', body: form });
+    if (!resp.ok) return;
+    const { text } = await resp.json();
+    if (!text || !text.trim()) return;
+    const raw = text.trim();
+    const hasWake = /도비/.test(raw);
+    if (hasWake) {
+      if (isPlayingAudio) { stopAudio(); console.log('[BARGE-IN] wake word'); }
+      activateWake();
+      const cmd = raw.replace(/.*?도비\s*야?\s*/i, '').trim();
+      if (cmd) { addTranscript('user', cmd); sendTranscript(cmd, true); setVoiceState('thinking'); }
+    } else if (wakeActive) {
+      if (isPlayingAudio) { stopAudio(); console.log('[BARGE-IN] command'); }
+      addTranscript('user', raw);
+      sendTranscript(raw, true);
+      setVoiceState('thinking');
     }
-  };
-
-  recognition.onerror = (e) => {
-    if (e.error !== 'aborted' && e.error !== 'no-speech') console.warn('[HUD] Speech error:', e.error);
-    recognitionRunning = false;
-    if (speechEnabled && voiceState !== 'thinking') {
-      setTimeout(startRecognition, 500);
-    }
-  };
+  } catch (e) {
+    console.debug('[HUD] STT 요청 실패:', e);
+  }
 }
 
 function startRecognition() {
-  if (!recognition || !speechEnabled || recognitionRunning) return;
-  if (voiceState === 'thinking') return;
-  try {
-    recognition.start();
-    recognitionRunning = true;
-    if (!isPlayingAudio) setVoiceState('listening');
-  } catch {}
+  if (!speechEnabled) return;
+  if (!micStream) { initRecognition(); return; }
+  if (recognitionRunning) return;
+  recognitionRunning = true;
+  _runChunk();
 }
 
 function stopRecognition() {
-  if (!recognition || !recognitionRunning) return;
-  try { recognition.abort(); } catch {}
-  recognitionRunning = false;
+  if (vadRecorder && vadRecorder.state !== 'inactive') vadRecorder.stop();
+  else _chunkBusy = false;
+}
+
+function activateWake() {
+  wakeActive = true;
+  clearTimeout(wakeTimer);
+  wakeTimer = setTimeout(deactivateWake, CONFIG.WAKE_TIMEOUT_MS);
+  const ind = document.getElementById('wake-indicator');
+  if (ind) ind.classList.add('active');
+}
+
+function deactivateWake() {
+  wakeActive = false;
+  const ind = document.getElementById('wake-indicator');
+  if (ind) ind.classList.remove('active');
 }
 
 // ── HUD Context (calendar / tasks) ───────────────────────
@@ -1974,7 +2023,7 @@ updateLeftPanel();
 
 // Voice WS 연결 지연 대비 5초 폴백
 setTimeout(() => {
-  if (!recognition) { initRecognition(); startRecognition(); }
+  if (!micStream) initRecognition();
 }, 5000);
 
 // Fetch HUD context

@@ -1856,6 +1856,48 @@ async def hud_context():
 
 
 
+_whisper_model = None
+
+def _get_whisper():
+    global _whisper_model
+    if _whisper_model is None:
+        from faster_whisper import WhisperModel
+        _whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
+        log.info("Whisper base model loaded")
+    return _whisper_model
+
+
+@app.post("/api/stt")
+async def stt_endpoint(audio: UploadFile = File(...)):
+    try:
+        data = await audio.read()
+        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+        try:
+            model = _get_whisper()
+            segments, _ = model.transcribe(
+                tmp_path,
+                language="ko",
+                beam_size=5,
+                vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 400},
+                initial_prompt="도비야, 데스크톱 열어줘. 오늘 일정 알려줘. 클로드 코드 실행해줘.",
+                no_speech_threshold=0.6,
+            )
+            _HALLUCINATIONS = {"구독과 좋아요", "시청해 주셔서 감사합니다", "구독", "좋아요", "MBC", "KBS", "SBS"}
+            parts = [s.text for s in segments if s.no_speech_prob < 0.6]
+            text = " ".join(parts).strip()
+            if text in _HALLUCINATIONS or len(text) < 2:
+                text = ""
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+        return {"text": text}
+    except Exception as e:
+        log.warning(f"STT error: {e}")
+        return {"text": ""}
+
+
 @app.get("/api/system-stats")
 async def system_stats():
     """Return system CPU/RAM/battery stats for the HUD."""
