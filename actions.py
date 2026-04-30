@@ -17,6 +17,16 @@ log = logging.getLogger("dobby.actions")
 
 DESKTOP_PATH = Path.home() / "Desktop"
 
+# Track open Claude Code Terminal windows: project_name (lowercase) → Terminal window id
+_claude_session_windows: dict[str, int] = {}
+
+
+def get_active_claude_sessions_summary() -> str:
+    """Return a one-line summary of open Claude Code sessions for the system prompt."""
+    if not _claude_session_windows:
+        return "없음"
+    return ", ".join(f"{name} (창 #{wid})" for name, wid in _claude_session_windows.items())
+
 
 async def _mark_terminal_as_dobby(revert_after: float = 5.0):
     """Temporarily set the front Terminal window to Ocean theme, then revert.
@@ -159,10 +169,9 @@ async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = 
     import shutil as _shutil
     from pathlib import Path as _Path
 
-    # Expand and normalize path
     project_dir = str(_Path(project_dir).expanduser().resolve())
+    project_key = _Path(project_dir).name.lower()
 
-    # Resolve claude binary
     if not bin_path:
         bin_path = (
             os.getenv("CLAUDE_BIN")
@@ -184,15 +193,16 @@ async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = 
             "confirmation": "Claude Code 실행 파일을 찾지 못했습니다. `which claude` 결과를 확인한 뒤 CLAUDE_BIN 환경 변수에 등록해 주세요.",
         }
 
-    # Escape path for AppleScript string literal (handle rare " in paths)
     safe_dir = project_dir.replace("\\", "\\\\").replace('"', '\\"')
     safe_bin = bin_path.replace("\\", "\\\\").replace('"', '\\"')
 
-    # Use AppleScript quoted form of for shell-safe cd
+    # Open Terminal and return the new window's id for reliable targeting later
     script = (
         'tell application "Terminal"\n'
         "    activate\n"
-        f'    do script "cd " & quoted form of "{safe_dir}" & " && clear && echo \'◈ DOBBY Claude Code Session\' && {safe_bin} --dangerously-skip-permissions"\n'
+        f'    set newTab to do script "cd " & quoted form of "{safe_dir}" & " && clear && echo \'◈ DOBBY Claude Code Session\' && {safe_bin} --dangerously-skip-permissions"\n'
+        "    delay 0.3\n"
+        "    return (id of window of newTab) as string\n"
         "end tell"
     )
     proc = await asyncio.create_subprocess_exec(
@@ -200,12 +210,18 @@ async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = 
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    _, stderr = await proc.communicate()
+    stdout, stderr = await proc.communicate()
     success = proc.returncode == 0
-    if not success:
-        log.error(f"open_claude_in_project failed: {stderr.decode()[:200]}")
-    else:
+    if success:
+        try:
+            wid = int(stdout.decode().strip())
+            _claude_session_windows[project_key] = wid
+            log.info(f"Opened Claude Code for '{project_key}', Terminal window id={wid}")
+        except (ValueError, TypeError):
+            log.warning(f"Could not parse Terminal window id: {stdout.decode()!r}")
         await _mark_terminal_as_dobby()
+    else:
+        log.error(f"open_claude_in_project failed: {stderr.decode()[:200]}")
     return {
         "success": success,
         "confirmation": "Claude Code is running in Terminal, sir. You can watch the progress."
@@ -215,60 +231,84 @@ async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = 
 
 
 async def prompt_existing_terminal(project_name: str, prompt: str) -> dict:
-    """Find a Terminal or iTerm2 window matching a project name and type a prompt into it."""
+    """Send a prompt to an open Claude Code Terminal session via clipboard paste."""
+    import subprocess as _subprocess
+
+    project_key = project_name.lower().strip()
     escaped_name = project_name.replace('"', '\\"')
-    escaped_prompt = prompt.replace("\\", "\\\\").replace('"', '\\"')
 
-    # Try Terminal.app first, then iTerm2
-    script = f'''
-set targetApp to ""
+    # Clipboard paste handles Korean and all Unicode (keystroke does not)
+    try:
+        _subprocess.run(["pbcopy"], input=prompt.encode("utf-8"), check=True, timeout=3)
+    except Exception as e:
+        log.error(f"pbcopy failed: {e}")
+        return {"success": False, "confirmation": "클립보드 복사에 실패했습니다, 주인님."}
 
--- Check Terminal.app
+    wid = _claude_session_windows.get(project_key)
+
+    if wid:
+        # Try stored window id first, fall back to name search
+        script = f'''
+tell application "Terminal"
+    set found to false
+    try
+        set w to window id {wid}
+        set index of w to 1
+        activate
+        set found to true
+    end try
+    if not found then
+        repeat with w2 in windows
+            if name of w2 contains "{escaped_name}" then
+                set index of w2 to 1
+                activate
+                set found to true
+                exit repeat
+            end if
+        end repeat
+    end if
+    if not found then
+        return "NOT_FOUND"
+    end if
+end tell
+delay 0.5
+tell application "System Events"
+    tell process "Terminal"
+        set frontmost to true
+        delay 0.2
+        keystroke "v" using command down
+        delay 0.2
+        key code 36
+    end tell
+end tell
+return "OK"
+'''
+    else:
+        script = f'''
+set found to false
 tell application "Terminal"
     repeat with w in windows
         if name of w contains "{escaped_name}" then
             set index of w to 1
             activate
-            set targetApp to "Terminal"
+            set found to true
             exit repeat
         end if
     end repeat
 end tell
-
-if targetApp is "" then
-    -- Check iTerm2
-    tell application "System Events"
-        if exists process "iTerm2" then
-            tell application "iTerm2"
-                repeat with w in windows
-                    if name of w contains "{escaped_name}" then
-                        select w
-                        activate
-                        set targetApp to "iTerm2"
-                        exit repeat
-                    end if
-                end repeat
-            end tell
-        end if
-    end tell
-end if
-
-if targetApp is "" then
+if not found then
     return "NOT_FOUND"
 end if
-
-delay 0.8
-
+delay 0.5
 tell application "System Events"
-    tell process targetApp
+    tell process "Terminal"
         set frontmost to true
-        delay 0.3
-        keystroke "{escaped_prompt}"
         delay 0.2
-        keystroke return
+        keystroke "v" using command down
+        delay 0.2
+        key code 36
     end tell
 end tell
-
 return "OK"
 '''
 
@@ -279,8 +319,8 @@ return "OK"
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
-
         result = stdout.decode().strip()
+
         if result == "NOT_FOUND":
             log.warning(f"No terminal window found for: {project_name}")
             return {

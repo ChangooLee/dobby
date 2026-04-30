@@ -42,7 +42,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from actions import execute_action, monitor_build, open_terminal, open_browser, open_claude_in_project, _generate_project_name, prompt_existing_terminal
+from actions import execute_action, monitor_build, open_terminal, open_browser, open_claude_in_project, _generate_project_name, prompt_existing_terminal, get_active_claude_sessions_summary
 from work_mode import WorkSession, is_casual_question
 from screen import get_active_windows, take_screenshot, describe_screen, format_windows_for_context
 from calendar_access import get_todays_events, get_upcoming_events, get_next_event, format_events_for_context, format_schedule_summary, refresh_cache as refresh_calendar_cache
@@ -251,6 +251,11 @@ ACTIVE DESKTOP: {active_desktop}
 - 현재 활성 데스크톱의 프로젝트가 위에 표시된다.
 - 사용자가 프로젝트명을 명시하지 않고 "수정해", "이거 봐줘", "작업해줘" 등 명령하면 → 현재 활성 데스크톱의 프로젝트에 TYPE_TO_CLAUDE 사용.
 - 데스크톱 스와이프 후 컨텍스트가 자동으로 업데이트된다.
+
+ACTIVE CLAUDE CODE SESSIONS: {active_claude_sessions}
+- 위 목록에 있는 프로젝트는 이미 Terminal에서 Claude Code 세션이 열려 있음.
+- 열려 있는 프로젝트에 명령을 전달할 때는 OPEN_CLAUDE 대신 TYPE_TO_CLAUDE 사용.
+- 목록에 없으면 OPEN_CLAUDE로 새 세션 시작.
 
 - [ACTION:ADD_NOTE] topic ||| content — save a note for future reference.
   "note that the API key expires in April" → [ACTION:ADD_NOTE] general ||| API key expires in April, need to renew before then
@@ -1443,6 +1448,7 @@ async def generate_response(
         project_dir=PROJECT_DIR,
         motion_status=motion_status_str,
         active_desktop=active_desktop_str,
+        active_claude_sessions=get_active_claude_sessions_summary(),
     )
     if lookup_status:
         system += f"\n\nACTIVE LOOKUPS:\n{lookup_status}\nIf asked about progress, report this status."
