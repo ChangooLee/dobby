@@ -165,38 +165,49 @@ async def open_chrome(url: str) -> dict:
 
 
 async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = None, project_name: str = None) -> dict:
-    """Open Terminal and run terminal_bridge.sh for a persistent DOBBY Claude Code session.
+    """Open Terminal and start an interactive Claude Code session (claude -c).
 
-    The bridge script maintains a named pipe per project, runs 'claude -p [--continue]'
-    for each incoming prompt, and captures output so DOBBY can read and summarize it.
+    Uses 'claude -c --dangerously-skip-permissions' which continues the most
+    recent session for that directory — equivalent to --resume but fully
+    automated (no interactive picker).
     """
+    import shutil as _shutil
     from pathlib import Path as _Path
 
     project_dir = str(_Path(project_dir).expanduser().resolve())
     if not project_name:
         project_name = _Path(project_dir).name
-
-    # Normalize key: lowercase, spaces/dashes → underscores
     proj_key = project_name.lower().strip().replace(" ", "_").replace("-", "_")
 
-    # terminal_bridge.sh lives next to this file
-    bridge_script = str(_Path(__file__).parent / "terminal_bridge.sh")
-    if not _Path(bridge_script).exists():
-        log.error(f"terminal_bridge.sh not found: {bridge_script}")
+    if not bin_path:
+        bin_path = (
+            os.getenv("CLAUDE_BIN")
+            or _shutil.which("claude")
+            or next(
+                (p for p in [
+                    "/opt/homebrew/bin/claude",
+                    "/usr/local/bin/claude",
+                    str(_Path.home() / ".npm-global" / "bin" / "claude"),
+                    str(_Path.home() / ".local" / "bin" / "claude"),
+                    str(_Path.home() / "bin" / "claude"),
+                ] if _Path(p).exists()),
+                None
+            )
+        )
+    if not bin_path:
         return {
             "success": False,
-            "confirmation": "terminal_bridge.sh를 찾지 못했습니다, 주인님.",
+            "confirmation": "Claude Code 실행 파일을 찾지 못했습니다. `which claude` 결과를 확인한 뒤 CLAUDE_BIN 환경 변수에 등록해 주세요.",
         }
 
-    safe_bridge = bridge_script.replace("\\", "\\\\").replace('"', '\\"')
-    safe_key = proj_key.replace("\\", "\\\\").replace('"', '\\"')
     safe_dir = project_dir.replace("\\", "\\\\").replace('"', '\\"')
+    safe_bin = bin_path.replace("\\", "\\\\").replace('"', '\\"')
 
-    # Run: zsh <bridge_script> <project_key> <project_dir>
+    # claude -c : continue most recent session (interactive TUI, not print mode)
     open_script = (
         'tell application "Terminal"\n'
         "    activate\n"
-        f'    do script "zsh " & quoted form of "{safe_bridge}" & " " & quoted form of "{safe_key}" & " " & quoted form of "{safe_dir}"\n'
+        f'    do script "cd " & quoted form of "{safe_dir}" & " && {safe_bin} -c --dangerously-skip-permissions"\n'
         "end tell"
     )
     proc = await asyncio.create_subprocess_exec(
@@ -215,7 +226,7 @@ async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = 
 
     await _mark_terminal_as_dobby()
 
-    # Capture front window id for reference
+    # Capture front window id so TYPE_TO_CLAUDE can find the window later
     id_script = (
         'tell application "Terminal"\n'
         "    delay 0.4\n"
@@ -231,13 +242,13 @@ async def open_claude_in_project(project_dir: str, prompt: str, bin_path: str = 
     try:
         wid = int(id_stdout.decode().strip())
         _claude_session_windows[proj_key] = wid
-        log.info(f"Opened bridge for '{proj_key}' (pipe: /tmp/dobi_cmd_{proj_key}_pipe), Terminal window id={wid}")
+        log.info(f"Opened Claude Code for '{proj_key}' (interactive), Terminal window id={wid}")
     except (ValueError, TypeError):
-        log.warning(f"Window ID 캡처 실패 (브리지는 시작됨): {id_stdout.decode()!r}")
+        log.warning(f"Window ID 캡처 실패 (세션은 열림): {id_stdout.decode()!r}")
 
     return {
         "success": True,
-        "confirmation": f"{project_name} Claude Code를 터미널에서 실행했습니다, 주인님.",
+        "confirmation": f"{project_name} Claude Code를 열었습니다, 주인님.",
     }
 
 

@@ -3080,52 +3080,25 @@ async def voice_handler(ws: WebSocket):
                                     async def _do_type_to_claude(_name=proj_name, _msg=msg_to_type, _ws=ws):
                                         if not _msg:
                                             return
-                                        proj_dir = _find_project_dir(_name)
-                                        if not proj_dir:
+                                        if not _find_project_dir(_name):
                                             msg = f"{_name} 프로젝트를 찾지 못했습니다, 주인님."
-                                            audio = await synthesize_speech(msg)
-                                            if audio and _ws:
-                                                try:
-                                                    await _ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": msg})
-                                                except Exception:
-                                                    pass
-                                            return
-                                        # bridge가 없을 때만 클립보드 붙여넣기 폴백
-                                        import bridge_session as _bridge_mod
-                                        if not _bridge_mod.is_ready(_name):
-                                            asyncio.create_task(prompt_existing_terminal(_name, _msg))
-                                        # 브리지 or WorkSession으로 응답 캡처
-                                        full_response = await _proj_sessions.send(_name, proj_dir, _msg)
-                                        # 음성용 요약
-                                        try:
-                                            if anthropic_client and len(full_response) > 80:
-                                                summary = await anthropic_client.messages.create(
-                                                    model="claude-haiku-4-5-20251001",
-                                                    max_tokens=150,
-                                                    system=(
-                                                        "You are DOBBY summarizing a Claude Code response. "
-                                                        "Always respond in Korean (한국어). "
-                                                        "1-2 sentences, spoken Korean, no markdown, no URLs. "
-                                                        "Start with '주인님, [프로젝트명]에서...'"
-                                                    ),
-                                                    messages=[{"role": "user", "content": f"Project: {_name}\nResponse:\n{full_response[:2000]}"}],
-                                                )
-                                                msg = summary.content[0].text
+                                        else:
+                                            # 인터랙티브 Claude Code 세션에 클립보드로 직접 입력
+                                            result = await prompt_existing_terminal(_name, _msg)
+                                            if result.get("success"):
+                                                msg = f"{_name}에 전달했습니다, 주인님. 해당 터미널을 확인해 주세요."
                                             else:
-                                                msg = full_response[:300] if full_response else f"{_name}에서 응답이 없습니다, 주인님."
-                                        except Exception:
-                                            msg = f"주인님, {_name}에서: {full_response[:200]}"
+                                                msg = result.get("confirmation", f"{_name} 터미널에 접근하지 못했습니다, 주인님.")
+                                        audio = await synthesize_speech(msg)
                                         if _ws:
                                             try:
-                                                audio = await synthesize_speech(strip_markdown_for_tts(msg))
-                                                await _ws.send_json({"type": "status", "state": "thinking"})
                                                 await _ws.send_json({"type": "status", "state": "speaking"})
                                                 if audio:
                                                     await _ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": msg})
                                                 else:
                                                     await _ws.send_json({"type": "text", "text": msg})
                                                 await _ws.send_json({"type": "status", "state": "idle"})
-                                                log.info(f"TYPE_TO_CLAUDE [{_name}]: {msg[:80]}")
+                                                log.info(f"TYPE_TO_CLAUDE [{_name}]: {msg}")
                                             except Exception as e:
                                                 log.error(f"TYPE_TO_CLAUDE send failed: {e}")
                                     asyncio.create_task(_do_type_to_claude())
