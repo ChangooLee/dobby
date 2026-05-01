@@ -52,21 +52,29 @@ DOBBY가 Claude Code를 제어하는 방식:
 ```
 사용자 음성: "agent-portal 열어줘"
     ↓
-DOBBY → agent-portal 데스크톱으로 전환
-       → Terminal에서 claude -c --dangerously-skip-permissions 실행
-       → 해당 프로젝트의 마지막 세션이 인터랙티브 TUI로 재개
+DOBBY → desktops.yaml에서 agent-portal의 Space 번호 조회
+       → yabai로 해당 Space로 정확히 이동
+       → tmux 세션(dobby_agent_portal) 생성/재개
+       → iTerm2 창을 해당 Space에서 열어 tmux attach
+       → claude -c --dangerously-skip-permissions 자동 실행
 
 사용자 음성: "API 엔드포인트 추가해줘"
     ↓
-DOBBY → 해당 터미널 창 포커스
-       → 클립보드에 프롬프트 복사
-       → Cmd+V + Enter로 Claude Code에 직접 입력
-       → 터미널에서 Claude Code가 작업하는 모습을 실시간으로 확인
+DOBBY → tmux send-keys로 해당 세션에 프롬프트 직접 입력
+       → tmux capture-pane으로 Claude Code 응답 캡처
+       → Haiku로 요약 후 TTS 음성 출력
 
 사용자 음성: "전체 프로젝트 설정해줘"
     ↓
-DOBBY → config/desktops.yaml 순서대로 각 데스크톱 방문
-       → 각 프로젝트에 Claude Code 세션 열기
+DOBBY → desktops.yaml 순서대로 각 Space 방문
+       → 각 프로젝트에 Claude Code tmux 세션 생성
+
+사용자 음성: "지금 어디에 뭐 떠있어?"
+    ↓
+DOBBY → yabai + tmux 상태 결합 조회
+       → "Space 2(agent-portal) Claude Code 실행 중,
+          Space 5(mcp-kr-legislation) Claude Code 실행 중,
+          Space 4(sourceport) 비어있음" 음성 보고
 ```
 
 **핵심**: 실제 코드 작업은 DOBBY 서버가 아니라 Terminal의 `claude` CLI가 수행합니다.  
@@ -77,13 +85,69 @@ DOBBY는 어떤 터미널 창에 무엇을 입력할지 오케스트레이션합
 - `claude --resume` : 세션 ID 선택 화면이 뜨는 인터랙티브 picker → 자동화 불가
 - `claude -c` (`--continue`) : 해당 디렉토리의 마지막 세션을 자동으로 재개 → DOBBY에 적합
 
-동작이 동일합니다 — 마지막 연결한 세션으로 바로 연결.
-
 ### 배경 작업 (PROMPT_PROJECT)
 
 "agent-portal 리서치해줘"처럼 결과를 DOBBY가 직접 요약해야 할 때는  
 `claude -p --continue` (헤드리스 print mode)를 별도로 실행해 결과를 캡처합니다.  
 이때는 터미널 창이 보이지 않으며, 완료 시 DOBBY가 음성으로 요약을 보고합니다.
+
+---
+
+## macOS Space(데스크톱) 관리
+
+DOBBY는 **yabai**를 통해 macOS Space를 제어합니다.
+
+### Space 전환 방식
+
+`yabai -m space --focus N` 명령으로 현재 위치에 관계없이 항상 정확한 Space로 이동합니다.  
+기존의 `Ctrl+→` 키 반복 방식은 사용자가 수동으로 Space를 바꾸면 카운터가 틀어지는 문제가 있어 폐기했습니다.
+
+### Space 자동 배정
+
+`config/desktops.yaml`에 등록된 프로젝트는 고정 Space를 사용합니다.  
+등록되지 않은 프로젝트를 열 때는 DOBBY가 빈 Space를 자동으로 찾아 배정합니다.
+
+### Space 생성 제약 (중요)
+
+**macOS SIP(시스템 무결성 보호)가 활성화된 상태에서는 프로그램적으로 새 Space를 생성할 수 없습니다.**
+
+yabai의 Space 생성(`yabai -m space --create`)은 scripting-addition이 필요하며,  
+scripting-addition 로드에는 SIP 부분 비활성화가 필요합니다.
+
+**권장 설정 (방법 1): Mission Control에서 Space를 미리 생성**
+
+프로젝트 수보다 여유있게 Space를 미리 만들어두면 DOBBY가 빈 Space를 자동으로 활용합니다.
+
+```
+Mission Control(F3) → 화면 상단 Space 바 → "+" 버튼으로 Space 추가
+```
+
+예: 프로젝트 5개 → Space를 7~10개 미리 생성해두기
+
+**선택 설정 (방법 2): SIP 부분 비활성화**
+
+SIP를 부분 비활성화하면 yabai가 필요할 때 자동으로 Space를 생성합니다.
+
+```bash
+# 1. Mac 전원 끄기 → 전원 버튼 길게 눌러 복구 모드 진입
+# 2. 터미널에서:
+csrutil enable --without debug --without fs
+# 3. 재부팅 후:
+
+# sudoers 등록 (1회)
+echo "$(whoami) ALL=(root) NOPASSWD: sha256:$(shasum -a 256 $(which yabai) | cut -d ' ' -f 1) $(which yabai) --load-sa" \
+  | sudo tee /private/etc/sudoers.d/yabai
+
+# yabai config 생성
+mkdir -p ~/.config/yabai
+cat > ~/.config/yabai/yabairc << 'EOF'
+sudo yabai --load-sa
+yabai -m signal --add event=dock_did_restart action="sudo yabai --load-sa"
+EOF
+chmod +x ~/.config/yabai/yabairc
+```
+
+방법 2 적용 후에는 `assign_space()`에서 `yabai -m space --create`가 정상 작동합니다.
 
 ---
 
