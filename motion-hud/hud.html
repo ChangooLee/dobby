@@ -708,8 +708,10 @@ const DROPOUT_TOLERANCE = 3; // ignore up to 3 consecutive frames with 0 hands
 
 // Fist gesture state
 let fistHoldStart = 0;
-const FIST_MIN_HOLD_MS = 400;  // 최소 유지 시간 — 이보다 짧으면 오인식
-const FIST_MAX_HOLD_MS = 1000; // 최대 유지 시간 — 이보다 길면 의도적 주먹이 아님
+let fistReleasedAt = 0;         // 주먹 해제 시각 — 스프레드 속도 측정용
+const FIST_MIN_HOLD_MS = 400;   // 최소 유지 시간
+const FIST_MAX_HOLD_MS = 1000;  // 최대 유지 시간
+const FIST_SPREAD_MAX_MS = 150; // 해제 후 이 시간 내에 열린 손 → "빠른 스프레드"
 let typeModeActivatedAt = 0; // type mode 활성화 시각 — fist 오인식 방지용
 let lastMissionControlAt = 0; // mission control 쿨다운 (2s)
 
@@ -1889,24 +1891,34 @@ function isOpenHandGesture(landmarks) {
 }
 
 function checkFistGesture(landmarks) {
-  if (typeModeActive) { fistHoldStart = 0; return; }
+  if (typeModeActive) { fistHoldStart = 0; fistReleasedAt = 0; return; }
+  const now = Date.now();
 
   if (isOpenHandGesture(landmarks)) {
-    // 주먹 400~1000ms 유지 후 펼침 → Mission Control (2s 쿨다운)
-    const held = fistHoldStart > 0 ? Date.now() - fistHoldStart : 0;
-    if (held >= FIST_MIN_HOLD_MS && held < FIST_MAX_HOLD_MS) {
-      if (Date.now() - lastMissionControlAt > 2000) {
-        lastMissionControlAt = Date.now();
-        sendMotionEvent('motion.gesture.mission_control');
-        showGesture('🖐 미션 컨트롤', 1200);
-        console.log('[GESTURE] fist-spread — mission control');
+    // 주먹 400~1000ms 유지 + 해제 후 150ms 내 오픈 → Mission Control
+    if (fistHoldStart > 0 && fistReleasedAt > 0) {
+      const held = fistReleasedAt - fistHoldStart;
+      const spreadTime = now - fistReleasedAt;
+      if (held >= FIST_MIN_HOLD_MS && held < FIST_MAX_HOLD_MS && spreadTime < FIST_SPREAD_MAX_MS) {
+        if (now - lastMissionControlAt > 2000) {
+          lastMissionControlAt = now;
+          sendMotionEvent('motion.gesture.mission_control');
+          showGesture('🖐 미션 컨트롤', 1200);
+          console.log('[GESTURE] fist-spread held=' + held + 'ms spread=' + spreadTime + 'ms');
+        }
       }
     }
-    fistHoldStart = 0;
+    fistHoldStart = 0; fistReleasedAt = 0;
   } else if (isFistGesture(landmarks)) {
-    if (!fistHoldStart) fistHoldStart = Date.now();
+    if (!fistHoldStart) fistHoldStart = now;
+    fistReleasedAt = 0;
   } else {
-    fistHoldStart = 0;
+    // 주먹과 오픈 핸드 사이 중간 상태 — 해제 시각 기록
+    if (fistHoldStart > 0 && !fistReleasedAt) fistReleasedAt = now;
+    // 너무 느리면 리셋
+    if (fistReleasedAt > 0 && now - fistReleasedAt > FIST_SPREAD_MAX_MS) {
+      fistHoldStart = 0; fistReleasedAt = 0;
+    }
   }
 }
 
