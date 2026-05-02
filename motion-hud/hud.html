@@ -1460,11 +1460,18 @@ let lastDwellClickTime = 0;
 let _dwellRequiredMs = 400; // 현재 필요한 정지 시간 (첫클릭=400, 더블=200)
 let typeModeActive = false;
 
-// V사인 / 엄지 올리기 — 음성 입력 제스처 상태
+// V사인 / 엄지 올리기 — 음성 입력 제스처 상태 (오른손)
 let vSignHoldStart = 0;
 let vSignTriggered = false;
 let thumbUpHoldStart = 0;
 let thumbUpTriggered = false;
+
+// 왼손 제스처 상태
+let leftThumbUpHoldStart = 0;
+let leftThumbUpTriggered = false;
+let leftThumbDownHoldStart = 0;
+let leftThumbDownTriggered = false;
+const LEFT_THUMB_HOLD_MS = 500;
 
 function isPointingGesture(landmarks) {
   return (
@@ -1748,6 +1755,18 @@ function onHandsResults(results) {
     checkThumbUpGesture(rightHandLandmarks);
   }
 
+  // 왼손 제스처 — Enter / Delete (camera "Right" = 사용자 왼손)
+  let leftHandLandmarks = null;
+  for (let i = 0; i < hands.length; i++) {
+    if ((handedness[i]?.label || 'Unknown') === 'Right') {
+      leftHandLandmarks = hands[i];
+      break;
+    }
+  }
+  if (leftHandLandmarks) {
+    checkLeftHandGestures(leftHandLandmarks);
+  }
+
   // 손 1개일 때만 스와이프 감지 (양손 동시 오인식 방지)
   if (hands.length === 1) {
     detectSwipeGestures(handMap);
@@ -1816,6 +1835,48 @@ function checkThumbUpGesture(landmarks) {
   } else {
     thumbUpHoldStart = 0;
     thumbUpTriggered = false;
+  }
+}
+
+function isThumbDownGesture(landmarks) {
+  // 👎 엄지 아래: 엄지 끝이 IP 관절보다 아래, 나머지 손가락 접힘
+  const tips = [LM.INDEX_TIP, LM.MIDDLE_TIP, LM.RING_TIP, LM.PINKY_TIP];
+  const mcps = [LM.INDEX_MCP, LM.MIDDLE_MCP, LM.RING_MCP, LM.PINKY_MCP];
+  return (
+    landmarks[LM.THUMB_TIP].y > landmarks[LM.THUMB_IP].y &&
+    tips.every((tip, i) => landmarks[tip].y > landmarks[mcps[i]].y)
+  );
+}
+
+function checkLeftHandGestures(landmarks) {
+  const now = Date.now();
+
+  // 👍 왼손 엄지 위 → Enter
+  if (isThumbUpGesture(landmarks)) {
+    if (!leftThumbUpHoldStart) { leftThumbUpHoldStart = now; }
+    if (!leftThumbUpTriggered && now - leftThumbUpHoldStart >= LEFT_THUMB_HOLD_MS) {
+      leftThumbUpTriggered = true;
+      sendMotionEvent('motion.keyboard.enter');
+      showGesture('👍 Enter', 600);
+      console.log('[LEFT] thumb-up — Enter');
+    }
+  } else {
+    leftThumbUpHoldStart = 0;
+    leftThumbUpTriggered = false;
+  }
+
+  // 👎 왼손 엄지 아래 → Delete (Cmd+Z)
+  if (isThumbDownGesture(landmarks)) {
+    if (!leftThumbDownHoldStart) { leftThumbDownHoldStart = now; }
+    if (!leftThumbDownTriggered && now - leftThumbDownHoldStart >= LEFT_THUMB_HOLD_MS) {
+      leftThumbDownTriggered = true;
+      sendMotionEvent('motion.keyboard.delete');
+      showGesture('👎 삭제', 600);
+      console.log('[LEFT] thumb-down — Delete');
+    }
+  } else {
+    leftThumbDownHoldStart = 0;
+    leftThumbDownTriggered = false;
   }
 }
 

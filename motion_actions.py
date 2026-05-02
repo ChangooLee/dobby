@@ -128,6 +128,10 @@ class MotionController:
             return await self._mouse_double_click(payload)
         elif event_type == "motion.type":
             return await self._type_text(payload)
+        elif event_type == "motion.keyboard.enter":
+            return await self._keyboard_enter()
+        elif event_type == "motion.keyboard.delete":
+            return await self._keyboard_delete()
 
         # 나머지 모션 이벤트는 enabled 상태일 때만 처리
         if not self.enabled or self.paused:
@@ -463,6 +467,32 @@ class MotionController:
             log.info(f"Typed via clipboard: {text!r}")
         except Exception as e:
             log.warning(f"_type_text error: {e}")
+        return None
+
+    async def _keyboard_enter(self) -> None:
+        if not _PYAUTOGUI_OK:
+            return None
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, lambda: pyautogui.press("return"))
+            log.info("Keyboard: Enter")
+        except Exception as e:
+            log.warning(f"keyboard_enter error: {e}")
+        return None
+
+    async def _keyboard_delete(self) -> None:
+        if not _PYAUTOGUI_OK:
+            return None
+        def _undo():
+            pyautogui.keyDown("command")
+            pyautogui.press("z")
+            pyautogui.keyUp("command")
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _undo)
+            log.info("Keyboard: Cmd+Z (undo)")
+        except Exception as e:
+            log.warning(f"keyboard_delete error: {e}")
         return None
 
 
