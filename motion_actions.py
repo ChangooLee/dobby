@@ -103,6 +103,8 @@ class MotionController:
             return await self._mouse_move(payload)
         elif event_type == "motion.mouse.left_click":
             return await self._mouse_click(payload, right=False)
+        elif event_type == "motion.mouse.double_click":
+            return await self._mouse_double_click(payload)
         elif event_type == "motion.type":
             return await self._type_text(payload)
 
@@ -329,6 +331,29 @@ class MotionController:
                 log.info("Click (current pos)")
         except Exception as e:
             log.warning(f"Click error: {e}")
+        return None
+
+    async def _mouse_double_click(self, payload: dict) -> None:
+        if not _PYAUTOGUI_OK:
+            return None
+
+        now = time.time()
+        if now - self._last_click_time < self._click_debounce:
+            return None
+        self._last_click_time = now
+
+        x = payload.get("x")
+        y = payload.get("y")
+
+        try:
+            if x is not None and y is not None:
+                pyautogui.doubleClick(int(x), int(y), button="left")
+                log.info(f"Double-click at ({int(x)}, {int(y)})")
+            else:
+                pyautogui.doubleClick(button="left")
+                log.info("Double-click (current pos)")
+        except Exception as e:
+            log.warning(f"Double-click error: {e}")
         return None
 
     async def _mouse_scroll(self, payload: dict) -> None:
