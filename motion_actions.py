@@ -337,21 +337,17 @@ class MotionController:
         if not _PYAUTOGUI_OK:
             return None
 
-        now = time.time()
-        if now - self._last_click_time < self._click_debounce:
-            return None
-        self._last_click_time = now
-
         x = payload.get("x")
         y = payload.get("y")
 
         try:
             if x is not None and y is not None:
-                pyautogui.doubleClick(int(x), int(y), button="left")
+                pyautogui.click(int(x), int(y), clicks=2, interval=0.05, button="left")
                 log.info(f"Double-click at ({int(x)}, {int(y)})")
             else:
-                pyautogui.doubleClick(button="left")
+                pyautogui.click(clicks=2, interval=0.05, button="left")
                 log.info("Double-click (current pos)")
+            self._last_click_time = time.time()
         except Exception as e:
             log.warning(f"Double-click error: {e}")
         return None
