@@ -709,7 +709,6 @@ const DROPOUT_TOLERANCE = 3; // ignore up to 3 consecutive frames with 0 hands
 // Fist gesture state
 let fistHoldStart = 0;
 const FIST_HOLD_MS = 600; // hold fist this long to trigger
-let fistTriggered = false; // prevent re-trigger until fist released
 let typeModeActivatedAt = 0; // type mode 활성화 시각 — fist 오인식 방지용
 let lastMissionControlAt = 0; // mission control 쿨다운 (2s)
 
@@ -1828,37 +1827,25 @@ function isOpenHandGesture(landmarks) {
 }
 
 function checkFistGesture(handMap) {
-  // 핀치 중에는 fist 감지 안함 — 핀치 자세(검지 굽힘)가 주먹으로 오인식됨
-  if (typeModeActive) { fistHoldStart = 0; fistTriggered = false; return; }
+  if (typeModeActive) { fistHoldStart = 0; return; }
   const hand = Object.values(handMap)[0];
-  if (!hand) { fistHoldStart = 0; fistTriggered = false; return; }
+  if (!hand) { fistHoldStart = 0; return; }
 
   if (isOpenHandGesture(hand)) {
-    if (fistHoldStart > 0 && !fistTriggered) {
-      if (Date.now() - fistHoldStart < FIST_HOLD_MS) {
-        // 주먹 → 빠른 펼침: Mission Control 열기 (2s 쿨다운)
-        if (Date.now() - lastMissionControlAt > 2000) {
-          lastMissionControlAt = Date.now();
-          sendMotionEvent('motion.gesture.mission_control');
-          showGesture('🖐 미션 컨트롤', 1200);
-          console.log('[GESTURE] fist-spread — mission control');
-        }
+    // 주먹 → 빠른 펼침: Mission Control 열기 (2s 쿨다운)
+    if (fistHoldStart > 0 && Date.now() - fistHoldStart < FIST_HOLD_MS) {
+      if (Date.now() - lastMissionControlAt > 2000) {
+        lastMissionControlAt = Date.now();
+        sendMotionEvent('motion.gesture.mission_control');
+        showGesture('🖐 미션 컨트롤', 1200);
+        console.log('[GESTURE] fist-spread — mission control');
       }
     }
     fistHoldStart = 0;
-    fistTriggered = false;
   } else if (isFistGesture(hand)) {
-    if (fistTriggered) return;
-    if (!fistHoldStart) { fistHoldStart = Date.now(); return; }
-    if (Date.now() - fistHoldStart >= FIST_HOLD_MS) {
-      fistTriggered = true; fistHoldStart = 0;
-      deactivateWake();
-      showGesture('✊ 인식 중단', 1200);
-      console.log('[GESTURE] fist — wake deactivated');
-    }
+    if (!fistHoldStart) fistHoldStart = Date.now();
   } else {
     fistHoldStart = 0;
-    fistTriggered = false;
   }
 }
 
