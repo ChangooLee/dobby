@@ -648,8 +648,9 @@ const CONFIG = {
 
   // Dwell 클릭 (정지 → 자동 클릭)
   DWELL_RADIUS: 15,         // 이 픽셀 이상 움직이면 타이머 리셋 (strict)
-  DWELL_MS: 600,            // 정지 유지 시간 → 클릭 발동
-  DWELL_DOUBLE_MS: 500,     // 클릭 후 이 시간 내 재정지 → 더블클릭
+  DWELL_MS: 400,            // 첫 클릭 정지 시간
+  DWELL_SECOND_MS: 200,     // 더블클릭용 두 번째 정지 시간 (짧게)
+  DWELL_DOUBLE_MS: 1000,    // 첫 클릭 후 이 창 안에 두 번째 정지 → 더블클릭
 
   // 음성 입력 제스처
   V_SIGN_HOLD_MS: 800,      // V사인 유지 → 음성 입력 시작
@@ -1457,6 +1458,7 @@ let dwellAnchorX = 0;
 let dwellAnchorY = 0;
 let dwellFired = false;
 let lastDwellClickTime = 0;
+let _dwellRequiredMs = 400; // 현재 필요한 정지 시간 (첫클릭=400, 더블=200)
 let typeModeActive = false;
 
 // V사인 / 엄지 올리기 — 음성 입력 제스처 상태
@@ -1481,7 +1483,7 @@ function drawIndexPointer(landmarks, W, H) {
   const R = 12;
   const now = Date.now();
   const dwellProgress = (dwellStart && !dwellFired)
-    ? Math.min(1, (now - dwellStart) / CONFIG.DWELL_MS)
+    ? Math.min(1, (now - dwellStart) / _dwellRequiredMs)
     : 0;
   // 상태별 색상: 일반=흰, dwell진행=주황, 타입모드=초록
   const col = typeModeActive ? '#00ff88' : dwellProgress > 0 ? '#ff8800' : '#ffffff';
@@ -1534,6 +1536,10 @@ function moveMouseToIndexTip(landmarks) {
 function checkDwellGesture(px, py) {
   if (typeModeActive) { dwellStart = 0; dwellFired = false; return; }
   const now = Date.now();
+  // 첫 클릭 후 더블클릭 창 안에 있으면 더 짧은 정지 시간 사용
+  const inDoubleWindow = lastDwellClickTime > 0 && (now - lastDwellClickTime) < CONFIG.DWELL_DOUBLE_MS;
+  _dwellRequiredMs = inDoubleWindow ? CONFIG.DWELL_SECOND_MS : CONFIG.DWELL_MS;
+
   if (!dwellStart) {
     dwellStart = now; dwellAnchorX = px; dwellAnchorY = py; dwellFired = false;
     return;
@@ -1545,10 +1551,9 @@ function checkDwellGesture(px, py) {
     return;
   }
   if (dwellFired) return;
-  if (now - dwellStart >= CONFIG.DWELL_MS) {
+  if (now - dwellStart >= _dwellRequiredMs) {
     dwellFired = true;
-    const isDouble = (now - lastDwellClickTime) < CONFIG.DWELL_DOUBLE_MS;
-    if (isDouble) {
+    if (inDoubleWindow) {
       lastDwellClickTime = 0;
       sendMotionEvent('motion.mouse.double_click', { x: px, y: py });
       showGesture('더블클릭', 500);
