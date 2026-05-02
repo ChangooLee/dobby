@@ -66,14 +66,20 @@ else
 fi
 
 # ── 3. Motion HUD ─────────────────────────────────────────────
-if pgrep -f "electron dist/main.js" &>/dev/null; then
+# 실제 프로세스 경로: .../node_modules/electron/dist/Electron.app/.../Electron dist/main.js
+if pgrep -f "Electron.app.*dist/main.js" &>/dev/null; then
   warn "Motion HUD 이미 실행 중"
 else
   log "Motion HUD 시작..."
   cd motion-hud
-  npm start &>/tmp/hud.log &
+  nohup npm start > /tmp/hud.log 2>&1 &
   cd "$SCRIPT_DIR"
-  log "Motion HUD 기동 중..."
+  sleep 4
+  if pgrep -f "Electron.app.*dist/main.js" &>/dev/null; then
+    log "Motion HUD 기동 완료"
+  else
+    err "Motion HUD 기동 실패. 로그: tail -f /tmp/hud.log"
+  fi
 fi
 
 echo ""
