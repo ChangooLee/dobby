@@ -1207,8 +1207,8 @@ async function sendAudioToSTT(blob) {
     if (hasWake) {
       if (isPlayingAudio) { stopAudio(); console.log('[BARGE-IN] wake word'); }
       activateWake();
-      const cmd = raw.replace(/.*?도비\s*야?\s*/i, '').trim();
-      if (cmd) { addTranscript('user', cmd); sendTranscript(cmd, true); setVoiceState('thinking'); }
+      const cmd = raw.replace(/.*?도비\s*야?\s*[,،、]?\s*/i, '').trim();
+      if (cmd) { addTranscript('user', raw); sendTranscript(cmd, true); setVoiceState('thinking'); }
     } else if (wakeActive) {
       if (isPlayingAudio) { stopAudio(); console.log('[BARGE-IN] command'); }
       addTranscript('user', raw);
