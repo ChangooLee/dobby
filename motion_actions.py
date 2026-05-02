@@ -47,6 +47,7 @@ class MotionController:
         self._click_debounce = 0.2  # seconds
         self._last_scroll_time = 0.0
         self._scroll_throttle = 0.05  # seconds
+        self._last_click_pos: tuple[int, int] | None = None  # 더블클릭 좌표 재사용
 
         log.info(f"MotionController initialized (enabled={self.enabled})")
 
@@ -321,6 +322,7 @@ class MotionController:
         try:
             if x is not None and y is not None:
                 button = "right" if right else "left"
+                self._last_click_pos = (int(x), int(y))
                 pyautogui.click(int(x), int(y), button=button)
                 log.info(f"Click {button} at ({int(x)}, {int(y)})")
             else:
@@ -334,19 +336,19 @@ class MotionController:
         return None
 
     async def _mouse_double_click(self, payload: dict) -> None:
-        """더블클릭 두 번째 클릭만 전송.
-        첫 번째 핀치에서 left_click이 이미 발송됐으므로 여기서는 클릭 1회만 추가하면
-        OS가 두 클릭을 더블클릭으로 인식한다."""
+        """더블클릭 두 번째 클릭 전송.
+        첫 번째 핀치에서 left_click이 이미 발송됐으므로 클릭 1회만 추가한다.
+        macOS 더블클릭 인식을 위해 반드시 첫 번째 클릭과 동일한 좌표를 사용한다.
+        """
         if not _PYAUTOGUI_OK:
             return None
 
-        x = payload.get("x")
-        y = payload.get("y")
-
+        # 첫 번째 클릭 좌표 재사용 — 좌표가 다르면 macOS가 더블클릭으로 인식 안 함
+        pos = self._last_click_pos
         try:
-            if x is not None and y is not None:
-                pyautogui.click(int(x), int(y), button="left")
-                log.info(f"Double-click (2nd) at ({int(x)}, {int(y)})")
+            if pos is not None:
+                pyautogui.click(pos[0], pos[1], button="left")
+                log.info(f"Double-click (2nd) at {pos}")
             else:
                 pyautogui.click(button="left")
                 log.info("Double-click (2nd, current pos)")
@@ -407,15 +409,30 @@ class MotionController:
         if not text:
             return None
 
-        log.info(f"_type_text: '{text}'")
+        log.info(f"_type_text called: '{text}'")
+
+        # 진단: 붙여넣기 전 frontmost 앱 확인
+        try:
+            diag = await asyncio.create_subprocess_exec(
+                "osascript", "-e",
+                'tell application "System Events" to return name of first process whose frontmost is true',
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+            )
+            out, _ = await diag.communicate()
+            log.info(f"Frontmost app: {out.decode().strip()}")
+        except Exception:
+            pass
 
         def _paste():
             import subprocess, time
-            # 클립보드에 복사
             subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
+            time.sleep(0.1)
+            # keyDown/keyUp 명시적 사용 — PAUSE=0 환경에서 hotkey()보다 신뢰성 높음
+            pyautogui.keyDown("command")
             time.sleep(0.05)
-            # pyautogui Cmd+V — HUD focusable:false 이므로 원래 앱에 전달됨
-            pyautogui.hotkey("command", "v")
+            pyautogui.press("v")
+            time.sleep(0.05)
+            pyautogui.keyUp("command")
 
         try:
             loop = asyncio.get_event_loop()
