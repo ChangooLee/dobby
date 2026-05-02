@@ -334,6 +334,9 @@ class MotionController:
         return None
 
     async def _mouse_double_click(self, payload: dict) -> None:
+        """더블클릭 두 번째 클릭만 전송.
+        첫 번째 핀치에서 left_click이 이미 발송됐으므로 여기서는 클릭 1회만 추가하면
+        OS가 두 클릭을 더블클릭으로 인식한다."""
         if not _PYAUTOGUI_OK:
             return None
 
@@ -342,11 +345,11 @@ class MotionController:
 
         try:
             if x is not None and y is not None:
-                pyautogui.click(int(x), int(y), clicks=2, interval=0.05, button="left")
-                log.info(f"Double-click at ({int(x)}, {int(y)})")
+                pyautogui.click(int(x), int(y), button="left")
+                log.info(f"Double-click (2nd) at ({int(x)}, {int(y)})")
             else:
-                pyautogui.click(clicks=2, interval=0.05, button="left")
-                log.info("Double-click (current pos)")
+                pyautogui.click(button="left")
+                log.info("Double-click (2nd, current pos)")
             self._last_click_time = time.time()
         except Exception as e:
             log.warning(f"Double-click error: {e}")
@@ -397,36 +400,29 @@ class MotionController:
         return None
 
     async def _type_text(self, payload: dict) -> None:
-        """STT 텍스트를 현재 포커스된 입력창에 타이핑.
-
-        HUD window는 focusable=false이므로 사용자의 앱이 항상 frontmost를 유지한다.
-        pbcopy → osascript Cmd+V (System Events) 방식으로 frontmost app에 붙여넣기.
+        """STT 텍스트를 현재 포커스된 입력창에 붙여넣기.
+        HUD는 focusable=false이므로 사용자의 앱이 항상 frontmost를 유지한다.
         """
         text = payload.get("text", "").strip()
         if not text:
             return None
 
-        # 1. 클립보드에 복사
-        pbcopy = await asyncio.create_subprocess_exec(
-            "pbcopy",
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await pbcopy.communicate(input=text.encode("utf-8"))
+        log.info(f"_type_text: '{text}'")
 
-        # 2. frontmost app에 Cmd+V (osascript — pyautogui보다 macOS에서 신뢰성 높음)
-        script = 'tell application "System Events" to keystroke "v" using command down'
-        proc = await asyncio.create_subprocess_exec(
-            "osascript", "-e", script,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, err = await proc.communicate()
-        if proc.returncode != 0:
-            log.warning(f"_type_text osascript error: {err.decode()[:120]}")
-        else:
+        def _paste():
+            import subprocess, time
+            # 클립보드에 복사
+            subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
+            time.sleep(0.05)
+            # pyautogui Cmd+V — HUD focusable:false 이므로 원래 앱에 전달됨
+            pyautogui.hotkey("command", "v")
+
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _paste)
             log.info(f"Typed via clipboard: {text!r}")
+        except Exception as e:
+            log.warning(f"_type_text error: {e}")
         return None
 
 

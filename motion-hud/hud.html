@@ -647,10 +647,10 @@ const CONFIG = {
   HAND_LOST_PAUSE_SEC: 3.0,
 
   // 핀치 (클릭 / 음성입력)
-  PINCH_ENTER: 0.030,       // 핀치 시작 임계값 — 이보다 가까워야 활성화
-  PINCH_EXIT: 0.055,        // 핀치 해제 임계값 — 이보다 멀어져야 해제 (히스테리시스)
+  PINCH_ENTER: 0.038,       // 핀치 시작 임계값 — 이보다 가까워야 활성화
+  PINCH_EXIT: 0.060,        // 핀치 해제 임계값 — 이보다 멀어져야 해제 (히스테리시스)
   PINCH_CLICK_MAX_MS: 350,  // 이 시간 내 떼면 클릭
-  PINCH_TYPE_MS: 2000,      // 이 이상 유지하면 음성 입력 모드
+  PINCH_TYPE_MS: 1500,      // 이 이상 유지하면 음성 입력 모드 (1.5초)
   DOUBLE_CLICK_MS: 400,     // 더블클릭 인식 시간 창 (ms)
 
   // 마우스 제어
@@ -1568,6 +1568,9 @@ function activateTypeMode() {
   clearTimeout(wakeTimer);
   showGesture('✍ 음성 입력 — 주먹으로 종료', 2500);
   console.log('[TYPE MODE] activated');
+  // 현재 청취 중인 청크를 즉시 종료하고 새 청크 시작 → 음성을 바로 캡처
+  stopRecognition();
+  setTimeout(() => { if (typeModeActive) startRecognition(); }, 80);
 }
 
 function deactivateTypeMode() {
