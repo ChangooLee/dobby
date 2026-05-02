@@ -709,9 +709,9 @@ const DROPOUT_TOLERANCE = 3; // ignore up to 3 consecutive frames with 0 hands
 // Fist gesture state
 let fistHoldStart = 0;
 let fistReleasedAt = 0;         // 주먹 해제 시각 — 스프레드 속도 측정용
-const FIST_MIN_HOLD_MS = 400;   // 최소 유지 시간
-const FIST_MAX_HOLD_MS = 1000;  // 최대 유지 시간
-const FIST_SPREAD_MAX_MS = 150; // 해제 후 이 시간 내에 열린 손 → "빠른 스프레드"
+const FIST_MIN_HOLD_MS = 200;   // 최소 유지 시간
+const FIST_MAX_HOLD_MS = 1500;  // 최대 유지 시간
+const FIST_SPREAD_MAX_MS = 300; // 해제 후 이 시간 내에 열린 손 → 스프레드 인식
 let typeModeActivatedAt = 0; // type mode 활성화 시각 — fist 오인식 방지용
 let lastMissionControlAt = 0; // mission control 쿨다운 (2s)
 
