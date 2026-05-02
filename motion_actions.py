@@ -32,6 +32,26 @@ except ImportError:
     _PYAUTOGUI_OK = False
     log.warning("pyautogui not installed — mouse control disabled. Run: pip install pyautogui")
 
+# Quartz CGEvent for reliable macOS click simulation (clickCount 지원)
+try:
+    import Quartz
+    _QUARTZ_OK = True
+except ImportError:
+    _QUARTZ_OK = False
+    log.warning("pyobjc-framework-Quartz not available — falling back to pyautogui for clicks")
+
+
+def _cg_mouse_click(x: int, y: int, click_count: int = 1, button: str = "left") -> None:
+    """Quartz CGEvent로 마우스 클릭 전송. clickCount=2이면 OS가 더블클릭으로 인식."""
+    btn = Quartz.kCGMouseButtonLeft if button == "left" else Quartz.kCGMouseButtonRight
+    down = Quartz.kCGEventLeftMouseDown if button == "left" else Quartz.kCGEventRightMouseDown
+    up   = Quartz.kCGEventLeftMouseUp   if button == "left" else Quartz.kCGEventRightMouseUp
+    pt   = Quartz.CGPoint(x, y)
+    for evt_type in (down, up):
+        e = Quartz.CGEventCreateMouseEvent(None, evt_type, pt, btn)
+        Quartz.CGEventSetIntegerValueField(e, Quartz.kCGMouseEventClickState, click_count)
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, e)
+
 
 class MotionController:
     """모션 제어 상태를 관리하고 이벤트를 처리한다."""
@@ -320,16 +340,16 @@ class MotionController:
         y = payload.get("y")
 
         try:
+            btn = "right" if right else "left"
             if x is not None and y is not None:
-                button = "right" if right else "left"
                 self._last_click_pos = (int(x), int(y))
-                pyautogui.click(int(x), int(y), button=button)
-                log.info(f"Click {button} at ({int(x)}, {int(y)})")
-            else:
-                if right:
-                    pyautogui.rightClick()
+                if _QUARTZ_OK:
+                    _cg_mouse_click(int(x), int(y), click_count=1, button=btn)
                 else:
-                    pyautogui.click()
+                    pyautogui.click(int(x), int(y), button=btn)
+                log.info(f"Click {btn} at ({int(x)}, {int(y)})")
+            else:
+                pyautogui.click(button=btn)
                 log.info("Click (current pos)")
         except Exception as e:
             log.warning(f"Click error: {e}")
@@ -343,10 +363,13 @@ class MotionController:
         if not _PYAUTOGUI_OK:
             return None
 
-        # 첫 번째 클릭 좌표 재사용 — 좌표가 다르면 macOS가 더블클릭으로 인식 안 함
+        # 첫 번째 클릭 좌표 재사용 + clickCount=2 → macOS가 더블클릭 이벤트로 분류
         pos = self._last_click_pos
         try:
-            if pos is not None:
+            if pos is not None and _QUARTZ_OK:
+                _cg_mouse_click(pos[0], pos[1], click_count=2, button="left")
+                log.info(f"Double-click (2nd, clickCount=2) at {pos}")
+            elif pos is not None:
                 pyautogui.click(pos[0], pos[1], button="left")
                 log.info(f"Double-click (2nd) at {pos}")
             else:
