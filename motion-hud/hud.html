@@ -708,7 +708,8 @@ const DROPOUT_TOLERANCE = 3; // ignore up to 3 consecutive frames with 0 hands
 
 // Fist gesture state
 let fistHoldStart = 0;
-const FIST_HOLD_MS = 600; // hold fist this long to trigger
+const FIST_MIN_HOLD_MS = 400;  // 최소 유지 시간 — 이보다 짧으면 오인식
+const FIST_MAX_HOLD_MS = 1000; // 최대 유지 시간 — 이보다 길면 의도적 주먹이 아님
 let typeModeActivatedAt = 0; // type mode 활성화 시각 — fist 오인식 방지용
 let lastMissionControlAt = 0; // mission control 쿨다운 (2s)
 
@@ -1891,8 +1892,9 @@ function checkFistGesture(landmarks) {
   if (typeModeActive) { fistHoldStart = 0; return; }
 
   if (isOpenHandGesture(landmarks)) {
-    // 주먹 → 빠른 펼침: Mission Control 열기 (2s 쿨다운)
-    if (fistHoldStart > 0 && Date.now() - fistHoldStart < FIST_HOLD_MS) {
+    // 주먹 400~1000ms 유지 후 펼침 → Mission Control (2s 쿨다운)
+    const held = fistHoldStart > 0 ? Date.now() - fistHoldStart : 0;
+    if (held >= FIST_MIN_HOLD_MS && held < FIST_MAX_HOLD_MS) {
       if (Date.now() - lastMissionControlAt > 2000) {
         lastMissionControlAt = Date.now();
         sendMotionEvent('motion.gesture.mission_control');
