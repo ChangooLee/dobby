@@ -1737,9 +1737,9 @@ function onHandsResults(results) {
     pointerSmooth = null;
   }
 
-  // 주먹 제스처 — 웨이크 중단 (손 개수 무관)
-  if (hands.length >= 1) {
-    checkFistGesture(handMap);
+  // 주먹 제스처 — 오른손만
+  if (rightHandLandmarks) {
+    checkFistGesture(rightHandLandmarks);
   }
 
   // V사인/엄지 올리기 — TYPE MODE 제스처 (오른손)
@@ -1826,12 +1826,10 @@ function isOpenHandGesture(landmarks) {
   return tips.every((tip, i) => landmarks[tip].y < landmarks[mcps[i]].y);
 }
 
-function checkFistGesture(handMap) {
+function checkFistGesture(landmarks) {
   if (typeModeActive) { fistHoldStart = 0; return; }
-  const hand = Object.values(handMap)[0];
-  if (!hand) { fistHoldStart = 0; return; }
 
-  if (isOpenHandGesture(hand)) {
+  if (isOpenHandGesture(landmarks)) {
     // 주먹 → 빠른 펼침: Mission Control 열기 (2s 쿨다운)
     if (fistHoldStart > 0 && Date.now() - fistHoldStart < FIST_HOLD_MS) {
       if (Date.now() - lastMissionControlAt > 2000) {
@@ -1842,7 +1840,7 @@ function checkFistGesture(handMap) {
       }
     }
     fistHoldStart = 0;
-  } else if (isFistGesture(hand)) {
+  } else if (isFistGesture(landmarks)) {
     if (!fistHoldStart) fistHoldStart = Date.now();
   } else {
     fistHoldStart = 0;
