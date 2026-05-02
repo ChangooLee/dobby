@@ -50,6 +50,39 @@ async def _yabai(*args) -> tuple[str, str, int]:
     return out.decode(errors="replace"), err.decode(errors="replace"), proc.returncode
 
 
+async def _native_space_key(right: bool) -> bool:
+    """Ctrl+→/← 키 시뮬레이션 — macOS 네이티브 슬라이딩 애니메이션 발동."""
+    loop = asyncio.get_event_loop()
+    direction = "right" if right else "left"
+    try:
+        import pyautogui
+        await loop.run_in_executor(None, lambda: pyautogui.hotkey("ctrl", direction))
+        log.debug(f"native space key: ctrl+{direction}")
+        return True
+    except Exception as e:
+        log.warning(f"pyautogui failed: {e}, trying osascript")
+    script = f'tell application "System Events" to key code {124 if right else 123} using {{control down}}'
+    proc = await asyncio.create_subprocess_exec(
+        "osascript", "-e", script,
+        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
+    )
+    _, err = await proc.communicate()
+    if proc.returncode != 0:
+        log.warning(f"osascript space key failed: {err.decode()[:80]}")
+        return False
+    return True
+
+
+async def _close_mission_control() -> None:
+    """Mission Control이 열려 있으면 Escape로 닫는다."""
+    script = 'tell application "System Events" to key code 53'  # Escape
+    proc = await asyncio.create_subprocess_exec(
+        "osascript", "-e", script,
+        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+    )
+    await proc.communicate()
+
+
 async def _tmux_sessions() -> set[str]:
     """현재 살아있는 tmux 세션 이름 집합 (dobby_* 만)."""
     try:
@@ -343,24 +376,39 @@ class DesktopManager:
         return True
 
     async def switch_to(self, index: int) -> bool:
+        """절대 Space 이동 — yabai 사용 (프로젝트 열기 등 정확한 위치 필요 시).
+        Mission Control이 열려 있으면 닫고 재시도한다."""
         if not self._can_switch():
             await asyncio.sleep(self._switch_debounce)
-        _, err, rc = await _yabai("-m", "space", "--focus", str(index))
-        if rc != 0:
+        for attempt in range(2):
+            _, err, rc = await _yabai("-m", "space", "--focus", str(index))
+            if rc == 0:
+                log.info(f"yabai: switched to space {index}")
+                await asyncio.sleep(0.25)
+                return True
             err_msg = err.strip()
             if "already focused" in err_msg:
-                return True  # 이미 해당 Space — 정상 경계 조건
+                return True
+            if "mission-control is active" in err_msg:
+                log.info("Mission Control active — closing before space switch")
+                await _close_mission_control()
+                await asyncio.sleep(0.4)
+                continue  # retry
             log.warning(f"yabai space --focus {index} failed: {err_msg}")
             return False
-        log.info(f"yabai: switched to space {index}")
-        await asyncio.sleep(0.2)  # Mission Control 애니메이션 최소 대기
-        return True
+        return False
 
     async def switch_next(self) -> bool:
-        return await self.switch_to(await self.current_index() + 1)
+        """상대 이동 — Ctrl+→ 네이티브 애니메이션 사용."""
+        if not self._can_switch():
+            return False
+        return await _native_space_key(right=True)
 
     async def switch_previous(self) -> bool:
-        return await self.switch_to(max(1, await self.current_index() - 1))
+        """상대 이동 — Ctrl+← 네이티브 애니메이션 사용."""
+        if not self._can_switch():
+            return False
+        return await _native_space_key(right=False)
 
     async def switch_to_project(self, project_name: str) -> bool:
         result = self.get_project_by_name(project_name)
