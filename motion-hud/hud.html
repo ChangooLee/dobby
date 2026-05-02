@@ -1779,10 +1779,10 @@ function onHandsResults(results) {
 // ── Gesture helpers ───────────────────────────────────────
 
 function isFistGesture(landmarks) {
-  // 검지~소지 손끝이 해당 MCP(손가락 뿌리)보다 아래(y가 큼) = 손가락이 접혀 있음
+  // 4개 중 3개 이상 접히면 주먹으로 인식
   const tips = [LM.INDEX_TIP, LM.MIDDLE_TIP, LM.RING_TIP, LM.PINKY_TIP];
   const mcps = [LM.INDEX_MCP, LM.MIDDLE_MCP, LM.RING_MCP, LM.PINKY_MCP];
-  return tips.every((tip, i) => landmarks[tip].y > landmarks[mcps[i]].y);
+  return tips.filter((tip, i) => landmarks[tip].y > landmarks[mcps[i]].y).length >= 3;
 }
 
 function isVSignGesture(landmarks) {
@@ -1884,10 +1884,10 @@ function checkLeftHandGestures(landmarks) {
 }
 
 function isOpenHandGesture(landmarks) {
-  // 검지~소지 손끝이 해당 MCP보다 위(y가 작음) = 손가락이 펼쳐져 있음
+  // 4개 중 3개 이상 펼쳐지면 오픈 핸드로 인식 (엄격한 4/4보다 인식률 높음)
   const tips = [LM.INDEX_TIP, LM.MIDDLE_TIP, LM.RING_TIP, LM.PINKY_TIP];
   const mcps = [LM.INDEX_MCP, LM.MIDDLE_MCP, LM.RING_MCP, LM.PINKY_MCP];
-  return tips.every((tip, i) => landmarks[tip].y < landmarks[mcps[i]].y);
+  return tips.filter((tip, i) => landmarks[tip].y < landmarks[mcps[i]].y).length >= 3;
 }
 
 function checkFistGesture(landmarks) {
