@@ -105,7 +105,7 @@ class DesktopManager:
         self._config: dict[int, dict] = {}        # Space idx → yaml entry
         self._runtime: dict[str, int] = {}        # project_name → Space idx (동적 배정)
         self._last_switch_time: float = 0.0
-        self._switch_debounce: float = 0.5
+        self._switch_debounce: float = 0.25
         self._load_config()
 
     # ── config ────────────────────────────────────────────────────────────────
@@ -347,10 +347,13 @@ class DesktopManager:
             await asyncio.sleep(self._switch_debounce)
         _, err, rc = await _yabai("-m", "space", "--focus", str(index))
         if rc != 0:
-            log.warning(f"yabai space --focus {index} failed: {err.strip()}")
+            err_msg = err.strip()
+            if "already focused" in err_msg:
+                return True  # 이미 해당 Space — 정상 경계 조건
+            log.warning(f"yabai space --focus {index} failed: {err_msg}")
             return False
         log.info(f"yabai: switched to space {index}")
-        await asyncio.sleep(0.4)
+        await asyncio.sleep(0.2)  # Mission Control 애니메이션 최소 대기
         return True
 
     async def switch_next(self) -> bool:

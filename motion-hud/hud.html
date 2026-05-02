@@ -640,7 +640,7 @@ const CONFIG = {
   SNAP_PEAK_VELOCITY: 1.0,  // 순간 최대 속도 (normalized/s)
   SNAP_MAX_DURATION: 350,   // 스냅 인식 창 (ms)
   SNAP_MIN_DISTANCE: 0.30,   // 최소 이동 거리 (normalized)
-  SWIPE_DEBOUNCE_MS: 800,
+  SWIPE_DEBOUNCE_MS: 500,
 
   // 손 추적
   HAND_HISTORY: 20,
@@ -706,6 +706,7 @@ let fistHoldStart = 0;
 const FIST_HOLD_MS = 600; // hold fist this long to trigger
 let fistTriggered = false; // prevent re-trigger until fist released
 let typeModeActivatedAt = 0; // type mode 활성화 시각 — fist 오인식 방지용
+let lastMissionControlAt = 0; // mission control 쿨다운 (2s)
 
 // Cat's cradle
 const tipSmooth = [
@@ -1382,11 +1383,11 @@ function updateHandHistory(label, wristLM) {
   // Use path length (not net displacement) to avoid false release at direction-reversal.
   if (swipeWaitForSettle) {
     const elapsed = now - lastSwipeTime;
-    // Max settle wait: force-release after 1000ms for rapid sequential swipes
-    if (elapsed > 1000) {
+    // Max settle wait: force-release after 600ms for rapid sequential swipes
+    if (elapsed > 600) {
       swipeWaitForSettle = false;
       for (const k of Object.keys(handHistory)) handHistory[k] = [];
-    } else if (elapsed > 600 && history.length >= 8) {
+    } else if (elapsed > 350 && history.length >= 8) {
       const tail = history.slice(-8);
       let pathLen = 0;
       for (let i = 1; i < tail.length; i++) {
@@ -1757,10 +1758,13 @@ function checkFistGesture(handMap) {
   if (isOpenHandGesture(hand)) {
     if (fistHoldStart > 0 && !fistTriggered) {
       if (Date.now() - fistHoldStart < FIST_HOLD_MS) {
-        // 주먹 → 빠른 펼침: Mission Control 열기
-        sendMotionEvent('motion.gesture.mission_control');
-        showGesture('🖐 미션 컨트롤', 1200);
-        console.log('[GESTURE] fist-spread — mission control');
+        // 주먹 → 빠른 펼침: Mission Control 열기 (2s 쿨다운)
+        if (Date.now() - lastMissionControlAt > 2000) {
+          lastMissionControlAt = Date.now();
+          sendMotionEvent('motion.gesture.mission_control');
+          showGesture('🖐 미션 컨트롤', 1200);
+          console.log('[GESTURE] fist-spread — mission control');
+        }
       }
     }
     fistHoldStart = 0;
