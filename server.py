@@ -215,10 +215,20 @@ When you decide the user needs something DONE (not just discussed), include an a
   "자비스 최근 변경사항 알려줘" → [ACTION:PROMPT_PROJECT] dobby ||| 최근 git 변경사항을 알려줘
   "agency-agents가 뭐하는 프로젝트야?" → [ACTION:PROMPT_PROJECT] agency-agents ||| 이 프로젝트의 목적과 구조를 설명해줘
 
-- [ACTION:OPEN_CLAUDE] project_name — Terminal.app에서 해당 프로젝트를 열고 Claude Code 인터랙티브 세션 시작. 사용자가 터미널 창을 직접 볼 수 있음.
-  "moba 클로드 코드 열어줘" → [ACTION:OPEN_CLAUDE] moba
-  "dobby 프로젝트 클로드 코드 띄워줘" → [ACTION:OPEN_CLAUDE] dobby
-  "agent-portal 작업하러 가자" → [ACTION:OPEN_CLAUDE] agent-portal
+- [ACTION:OPEN_CLAUDE] project_name | mode — Claude Code 세션을 열고 iTerm2에 표시.
+  mode는 반드시 포함해야 하며 두 가지만 허용:
+    | new  → 프로젝트 전용 Space(데스크톱)로 이동한 뒤 그 Space에 창 열기
+    | here → 현재 Space에 그대로 창 열기 (다른 프로젝트와 같은 데스크톱)
+
+  IMPORTANT: 사용자가 어디에 열지 명시하지 않은 경우 반드시 먼저 물어본다.
+  "agent-portal 열어줘" → 먼저 질문: "새 데스크톱에 열까요, 현재 데스크톱에 열까요?"
+  사용자: "새 데스크톱에" → [ACTION:OPEN_CLAUDE] agent-portal | new
+  사용자: "현재에 열어줘" → [ACTION:OPEN_CLAUDE] agent-portal | here
+  사용자: "같이 띄워줘" / "여기에" / "몰아서" → [ACTION:OPEN_CLAUDE] agent-portal | here
+  사용자: "따로" / "새로" / "새 데스크톱" → [ACTION:OPEN_CLAUDE] agent-portal | new
+  사용자가 명확히 말했을 때는 바로 액션 실행 (질문 없이):
+  "agent-portal 새 데스크톱에 열어줘" → [ACTION:OPEN_CLAUDE] agent-portal | new
+  "여기에 mcp-kr-legislation 띄워줘" → [ACTION:OPEN_CLAUDE] mcp-kr-legislation | here
 
 - [ACTION:TYPE_TO_CLAUDE] project_name ||| message — 이미 열려있는 Terminal 창에 텍스트를 타이핑해서 보냄 (기존 Claude Code 세션에 명령 전달).
   "moba 클로드 코드에 버그 수정해달라고 해" → [ACTION:TYPE_TO_CLAUDE] moba ||| 버그를 수정해줘
@@ -3066,21 +3076,29 @@ async def voice_handler(ws: WebSocket):
                                     asyncio.create_task(_do_launch_hud())
 
                                 elif embedded_action["action"] == "open_claude":
-                                    proj_name = embedded_action.get("target", "").strip()
+                                    # Parse "project_name | new" or "project_name | here"
+                                    raw_target = embedded_action.get("target", "")
+                                    if "|" in raw_target:
+                                        proj_name, mode_raw = raw_target.split("|", 1)
+                                        proj_name = proj_name.strip()
+                                        _same_space = mode_raw.strip().lower() == "here"
+                                    else:
+                                        proj_name = raw_target.strip()
+                                        _same_space = False  # default: new Space
+
                                     proj_dir = _find_project_dir(proj_name)
-                                    # resolve desktop_index before closure
                                     _desktop_result = desktop_manager.get_project_by_name(proj_name)
                                     _desktop_idx = _desktop_result[0] if _desktop_result else None
-                                    async def _do_open_claude(_dir=proj_dir, _name=proj_name, _didx=_desktop_idx, _ws=ws):
+
+                                    async def _do_open_claude(_dir=proj_dir, _name=proj_name, _didx=_desktop_idx, _here=_same_space, _ws=ws):
                                         if not _dir:
                                             msg = f"{_name} 프로젝트를 찾지 못했습니다, 주인님."
                                         else:
-                                            # open_claude_in_project가 Space 전환까지 담당
                                             result = await open_claude_in_project(
                                                 _dir, "",
                                                 project_name=_name,
-                                                desktop_index=_didx,
-                                                desktop_manager=desktop_manager,
+                                                desktop_index=None if _here else _didx,
+                                                desktop_manager=None if _here else desktop_manager,
                                             )
                                             await _proj_sessions.open_session(_name, _dir)
                                             msg = result.get("confirmation", f"{_name} Claude Code를 열었습니다, 주인님.")

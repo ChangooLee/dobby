@@ -202,11 +202,15 @@ async def open_claude_in_project(
     # Step 3: attach in iTerm2 on the now-active Space
     await _tmux.attach_in_terminal(project_name)
 
-    log.info(f"Opened Claude Code for '{project_name}' on Space {desktop_index}")
-    used_space = space if desktop_manager else desktop_index
+    if desktop_manager:
+        used_space = space
+        location = f"Space {used_space}에"
+    else:
+        location = "현재 데스크톱에"
+    log.info(f"Opened Claude Code for '{project_name}' — {location}")
     return {
         "success": True,
-        "confirmation": f"{project_name} Claude Code를 {f'Space {used_space}에 ' if used_space else ''}열었습니다, 주인님.",
+        "confirmation": f"{project_name} Claude Code를 {location} 열었습니다, 주인님.",
     }
 
 
