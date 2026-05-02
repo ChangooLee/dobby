@@ -62,6 +62,7 @@ function createHudWindow() {
     hasShadow: false,
     resizable: true,
     skipTaskbar: true,
+    focusable: false,  // never steal keyboard focus from user's app
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,

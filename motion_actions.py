@@ -376,30 +376,36 @@ class MotionController:
         return None
 
     async def _type_text(self, payload: dict) -> None:
-        """STT 텍스트를 현재 포커스된 입력창에 타이핑."""
+        """STT 텍스트를 현재 포커스된 입력창에 타이핑.
+
+        HUD window는 focusable=false이므로 사용자의 앱이 항상 frontmost를 유지한다.
+        pbcopy → osascript Cmd+V (System Events) 방식으로 frontmost app에 붙여넣기.
+        """
         text = payload.get("text", "").strip()
         if not text:
             return None
-        import asyncio, subprocess, time
 
-        def _do_type():
-            subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
-            time.sleep(0.08)
-            # 이전 hotkey 호출에서 stuck된 modifier 키 먼저 해제
-            for mod in ("command", "shift", "ctrl", "alt"):
-                try:
-                    pyautogui.keyUp(mod)
-                except Exception:
-                    pass
-            time.sleep(0.02)
-            pyautogui.hotkey("command", "v")
+        # 1. 클립보드에 복사
+        pbcopy = await asyncio.create_subprocess_exec(
+            "pbcopy",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await pbcopy.communicate(input=text.encode("utf-8"))
 
-        try:
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, _do_type)
+        # 2. frontmost app에 Cmd+V (osascript — pyautogui보다 macOS에서 신뢰성 높음)
+        script = 'tell application "System Events" to keystroke "v" using command down'
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", script,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, err = await proc.communicate()
+        if proc.returncode != 0:
+            log.warning(f"_type_text osascript error: {err.decode()[:120]}")
+        else:
             log.info(f"Typed via clipboard: {text!r}")
-        except Exception as e:
-            log.warning(f"Type error: {e}")
         return None
 
 
