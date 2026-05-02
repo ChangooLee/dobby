@@ -1829,7 +1829,7 @@ function isOpenHandGesture(landmarks) {
 
 function checkFistGesture(handMap) {
   // 핀치 중에는 fist 감지 안함 — 핀치 자세(검지 굽힘)가 주먹으로 오인식됨
-  if (dwellFired) { fistHoldStart = 0; fistTriggered = false; return; }
+  if (typeModeActive) { fistHoldStart = 0; fistTriggered = false; return; }
   const hand = Object.values(handMap)[0];
   if (!hand) { fistHoldStart = 0; fistTriggered = false; return; }
 
@@ -1865,8 +1865,6 @@ function checkFistGesture(handMap) {
 // ── Gesture recognition ───────────────────────────────────
 function detectSwipeGestures(handMap) {
   if (typeModeActive) return;    // 음성 입력 중 스와이프 차단
-  if (dwellFired) return;         // dwell 클릭 직후 손목 움직임 오인식 방지
-  if (vSignHoldStart > 0) return; // V사인 진입 중 스와이프 차단
   if (swipeWaitForSettle) return;
   const now = Date.now();
   for (const label of Object.keys(handHistory)) {
