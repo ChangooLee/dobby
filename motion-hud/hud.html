@@ -1779,10 +1779,10 @@ function onHandsResults(results) {
 // ── Gesture helpers ───────────────────────────────────────
 
 function isFistGesture(landmarks) {
-  // 4개 중 3개 이상 접히면 주먹으로 인식
+  // 4개 전부 접혀야 주먹 — 포인팅(검지만 펴고 나머지 3개 접힘)과 구분
   const tips = [LM.INDEX_TIP, LM.MIDDLE_TIP, LM.RING_TIP, LM.PINKY_TIP];
   const mcps = [LM.INDEX_MCP, LM.MIDDLE_MCP, LM.RING_MCP, LM.PINKY_MCP];
-  return tips.filter((tip, i) => landmarks[tip].y > landmarks[mcps[i]].y).length >= 3;
+  return tips.every((tip, i) => landmarks[tip].y > landmarks[mcps[i]].y);
 }
 
 function isVSignGesture(landmarks) {
