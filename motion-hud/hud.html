@@ -1928,12 +1928,10 @@ function checkFistGesture(landmarks) {
 
   // 손끝 거리가 기준값의 FACTOR 이상 → 진짜 펼침
   if (fistExtension > 0 && ext / fistExtension >= FIST_SPREAD_FACTOR) {
-    if (now - lastMissionControlAt > 2000) {
-      lastMissionControlAt = now;
-      sendMotionEvent('motion.gesture.mission_control');
-      showGesture('🖐 미션 컨트롤', 1200);
-      console.log('[GESTURE] spread factor=' + (ext / fistExtension).toFixed(2));
-    }
+    lastMissionControlAt = now;
+    sendMotionEvent('motion.gesture.mission_control');
+    showGesture('🖐 미션 컨트롤', 1200);
+    console.log('[GESTURE] spread factor=' + (ext / fistExtension).toFixed(2));
     fistHoldStart = 0; fistReleasedAt = 0; fistExtension = 0;
   }
 }
