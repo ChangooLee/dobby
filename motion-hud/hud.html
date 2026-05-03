@@ -1179,12 +1179,13 @@ function _runChunk() {
     setTimeout(_runChunk, 1000);
     return;
   }
+  const chunkStartedDuringPlayback = isPlayingAudio;
   const parts = [];
   rec.ondataavailable = e => { if (e.data.size > 0) parts.push(e.data); };
   rec.onstop = () => {
     _chunkBusy = false;
     const blob = new Blob(parts, { type: 'audio/webm' });
-    if (blob.size > 1000) sendAudioToSTT(blob);
+    if (blob.size > 1000) sendAudioToSTT(blob, chunkStartedDuringPlayback);
     if (speechEnabled) setTimeout(_runChunk, 80);
     else { recognitionRunning = false; if (voiceState === 'listening') setVoiceState('idle'); }
   };
@@ -1194,7 +1195,7 @@ function _runChunk() {
   vadRecorder = rec;
 }
 
-async function sendAudioToSTT(blob) {
+async function sendAudioToSTT(blob, duringPlayback = false) {
   try {
     const form = new FormData();
     form.append('audio', blob, 'audio.webm');
@@ -1211,7 +1212,14 @@ async function sendAudioToSTT(blob) {
       return;
     }
 
-    const hasWake = /도비/.test(raw);
+    // 도비 TTS 에코 방지: 재생 중 녹음된 청크는 wake 감지 건너뜀
+    if (duringPlayback) {
+      console.debug('[STT] echo chunk discarded (recorded during playback)');
+      return;
+    }
+
+    // 엄격한 wake 패턴: "도비야"만 허용 (도비입니다, 도비가 등 자기참조 제외)
+    const hasWake = /도비\s*야/i.test(raw);
     if (hasWake) {
       if (isPlayingAudio) { stopAudio(); console.log('[BARGE-IN] wake word'); }
       activateWake();
