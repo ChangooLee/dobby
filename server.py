@@ -1958,15 +1958,14 @@ async def stt_endpoint(audio: UploadFile = File(...)):
                     tmp_path,
                     language="ko",
                     beam_size=5,
-                    vad_filter=False,
-                    initial_prompt="안녕하세요.",
+                    vad_filter=True,        # Silero VAD: 무음/잡음 청크 무시
                     no_speech_threshold=0.6,
                 )
                 return list(segs)  # generator를 thread 안에서 소비
 
             segments = await loop.run_in_executor(_get_whisper_executor(), _transcribe)
             _HALLUCINATIONS = {"구독과 좋아요", "시청해 주셔서 감사합니다", "구독", "좋아요", "MBC", "KBS", "SBS",
-                                 "데스크톱 열어줘", "오늘 일정 알려줘", "클로드 코드 실행해줘", "안녕하세요"}
+                                 "데스크톱 열어줘", "오늘 일정 알려줘", "클로드 코드 실행해줘"}
             parts = [s.text for s in segments if s.no_speech_prob < 0.6]
             text = " ".join(parts).strip()
             if text in _HALLUCINATIONS or len(text) < 2:

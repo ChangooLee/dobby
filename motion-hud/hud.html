@@ -1179,13 +1179,12 @@ function _runChunk() {
     setTimeout(_runChunk, 1000);
     return;
   }
-  const chunkStartedDuringPlayback = isPlayingAudio;
   const parts = [];
   rec.ondataavailable = e => { if (e.data.size > 0) parts.push(e.data); };
   rec.onstop = () => {
     _chunkBusy = false;
     const blob = new Blob(parts, { type: 'audio/webm' });
-    if (blob.size > 1000) sendAudioToSTT(blob, chunkStartedDuringPlayback);
+    if (blob.size > 1000) sendAudioToSTT(blob);
     if (speechEnabled) setTimeout(_runChunk, 80);
     else { recognitionRunning = false; if (voiceState === 'listening') setVoiceState('idle'); }
   };
@@ -1195,7 +1194,7 @@ function _runChunk() {
   vadRecorder = rec;
 }
 
-async function sendAudioToSTT(blob, duringPlayback = false) {
+async function sendAudioToSTT(blob) {
   try {
     const form = new FormData();
     form.append('audio', blob, 'audio.webm');
@@ -1209,12 +1208,6 @@ async function sendAudioToSTT(blob, duringPlayback = false) {
     if (typeModeActive) {
       console.log('[TYPE MODE] typing:', raw);
       sendMotionEvent('motion.type', { text: raw });
-      return;
-    }
-
-    // 도비 TTS 에코 방지: 재생 중 녹음된 청크는 wake 감지 건너뜀
-    if (duringPlayback) {
-      console.debug('[STT] echo chunk discarded (recorded during playback)');
       return;
     }
 
