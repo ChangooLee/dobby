@@ -7,13 +7,44 @@
     "build": "tsc",
     "dev": "tsc && electron dist/main.js",
     "start": "electron dist/main.js",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "pack": "npm run build && electron-builder --mac --dir",
+    "dist": "npm run build && electron-builder --mac"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "electron": "^33.4.11",
+    "electron-builder": "^26.8.1",
     "typescript": "^5.7.0"
   },
-  "dependencies": {
-    "electron": "^33.4.11"
+  "build": {
+    "appId": "com.dobby.motionhud",
+    "productName": "DOBBY",
+    "asar": true,
+    "mac": {
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.utilities",
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["arm64"]
+        }
+      ],
+      "extendInfo": {
+        "LSUIElement": true,
+        "NSMicrophoneUsageDescription": "음성 인식을 위해 마이크가 필요합니다.",
+        "NSCameraUsageDescription": "손동작 인식을 위해 카메라가 필요합니다."
+      }
+    },
+    "files": [
+      "dist/**/*",
+      "hud.html",
+      "three.module.min.js",
+      "three.core.min.js",
+      "assets/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    }
   }
 }

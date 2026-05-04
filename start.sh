@@ -66,16 +66,20 @@ else
 fi
 
 # ── 3. Motion HUD ─────────────────────────────────────────────
-# 실제 프로세스 경로: .../node_modules/electron/dist/Electron.app/.../Electron dist/main.js
-if pgrep -f "Electron.app.*dist/main.js" &>/dev/null; then
+HUD_APP="$SCRIPT_DIR/motion-hud/release/mac-arm64/DOBBY.app"
+
+if pgrep -f "DOBBY.app.*MacOS/DOBBY" &>/dev/null || pgrep -f "Electron.app.*dist/main.js" &>/dev/null; then
   warn "Motion HUD 이미 실행 중"
 else
   log "Motion HUD 시작..."
-  cd motion-hud
-  nohup npm start > /tmp/hud.log 2>&1 &
-  cd "$SCRIPT_DIR"
-  sleep 4
-  if pgrep -f "Electron.app.*dist/main.js" &>/dev/null; then
+  if [ -d "$HUD_APP" ]; then
+    nohup open -a "$HUD_APP" > /tmp/hud.log 2>&1 &
+  else
+    warn "패키지 앱 없음 — npm start 폴백 (motion-hud/release/mac-arm64/DOBBY.app 가 없습니다)"
+    cd motion-hud && nohup npm start > /tmp/hud.log 2>&1 & cd "$SCRIPT_DIR"
+  fi
+  sleep 3
+  if pgrep -f "DOBBY.app.*MacOS/DOBBY" &>/dev/null || pgrep -f "Electron.app.*dist/main.js" &>/dev/null; then
     log "Motion HUD 기동 완료"
   else
     err "Motion HUD 기동 실패. 로그: tail -f /tmp/hud.log"
