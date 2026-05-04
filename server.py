@@ -1958,7 +1958,12 @@ async def stt_endpoint(audio: UploadFile = File(...)):
                     tmp_path,
                     language="ko",
                     beam_size=5,
-                    vad_filter=True,        # Silero VAD: 무음/잡음 청크 무시
+                    vad_filter=True,
+                    vad_parameters=dict(
+                        threshold=0.3,              # 기본 0.5 → 짧은 발화 감지
+                        min_speech_duration_ms=100, # 기본 250ms → "도비야" 수준 허용
+                        speech_pad_ms=300,          # 발화 앞뒤 패딩
+                    ),
                     no_speech_threshold=0.6,
                 )
                 return list(segs)  # generator를 thread 안에서 소비
