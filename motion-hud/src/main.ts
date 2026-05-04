@@ -144,7 +144,7 @@ app.on("certificate-error", (event, _webContents, url, _error, _cert, callback) 
 });
 
 // app ready 이후에 createHudWindow 호출 — screen 모듈 사용 가능
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // session-level: fetch/WebSocket/XHR 등 모든 TLS 연결에 적용
   session.defaultSession.setCertificateVerifyProc((_req, callback) => {
     callback(0); // 0 = net::OK (모든 인증서 허용)
@@ -152,9 +152,22 @@ app.whenReady().then(() => {
 
   // 마이크 + 음성 인식 권한 자동 허용
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    const allowed = ['media', 'microphone', 'audioCapture', 'speechRecognition'];
+    const allowed = ['media', 'microphone', 'audioCapture', 'speechRecognition', 'camera'];
     callback(allowed.includes(permission));
   });
+
+  // macOS TCC: 카메라·마이크 권한을 OS 레벨에서 사전 요청
+  if (process.platform === "darwin") {
+    const { systemPreferences } = await import("electron");
+    const camStatus = systemPreferences.getMediaAccessStatus("camera");
+    const micStatus = systemPreferences.getMediaAccessStatus("microphone");
+    if (camStatus !== "granted") {
+      await systemPreferences.askForMediaAccess("camera");
+    }
+    if (micStatus !== "granted") {
+      await systemPreferences.askForMediaAccess("microphone");
+    }
+  }
 
   createHudWindow();
 });

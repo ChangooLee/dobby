@@ -1321,17 +1321,8 @@ let mpHands  = null;
 async function startCamera() {
   if (cameraRunning) return;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 640, height: 480, facingMode: 'user' }
-    });
-    video.srcObject = stream;
-    await video.play();
-
-    // 비디오가 실제로 재생 가능한 상태가 될 때까지 대기
-    if (video.readyState < 2) {
-      await new Promise(resolve => video.addEventListener('canplay', resolve, { once: true }));
-    }
-
+    // MediaPipe Camera 유틸리티가 getUserMedia + srcObject + play를 직접 관리
+    // 수동 getUserMedia 호출 시 srcObject 중복 설정 → AbortError 발생하므로 제거
     mpHands = new Hands({
       locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`
     });
@@ -1345,7 +1336,6 @@ async function startCamera() {
 
     mpCamera = new Camera(video, {
       onFrame: async () => {
-        // 비디오 준비 전이면 스킵
         if (!mpHands || !cameraRunning || video.readyState < 2) return;
         try {
           await mpHands.send({ image: video });
@@ -1370,7 +1360,14 @@ async function startCamera() {
     await mpCamera.start();
     cameraRunning = true;
   } catch (err) {
-    console.error('[HUD] Camera error:', err);
+    const name = err?.name || 'Unknown';
+    const msg  = err?.message || String(err);
+    console.error(`[HUD] Camera error: ${name} — ${msg}`);
+    if (name === 'NotAllowedError') {
+      console.warn('[HUD] 카메라 권한 거부됨 — 시스템 환경설정 > 개인 정보 보호 > 카메라 에서 DOBBY 허용 후 재시작 필요');
+    } else {
+      setTimeout(startCamera, 5000);
+    }
   }
 }
 
