@@ -141,9 +141,10 @@ SAY_VOICE=Yuna                  # 한국어 폴백 TTS (Qwen3 불가 시)
 
 ## 음성 인식 (STT)
 
-- Whisper (`faster-whisper` base 모델) 사용
-- MediaRecorder 2.5초 청크 → `/api/stt` POST → 결과를 voice WS로 전달
-- 묵음 구간은 Whisper VAD 필터로 자동 제거
+- Whisper `large-v3-turbo` (int8, CPU) 사용 — 첫 요청 시 모델 로드 (~2s)
+- MediaRecorder 4초 청크 → ffmpeg webm→WAV + noisereduce 전처리 → `/api/stt` → Whisper
+- Silero VAD (`threshold=0.3`, `min_speech_duration_ms=100`) 으로 묵음 자동 제거
+- 브라우저단 80Hz 하이패스 필터로 저주파 노이즈(AC, 키보드 진동) 제거
 
 ---
 
@@ -184,4 +185,4 @@ SAY_VOICE=Yuna                  # 한국어 폴백 TTS (Qwen3 불가 시)
 
 ---
 
-*마지막 업데이트: 2026-04-29*
+*마지막 업데이트: 2026-05-12*
