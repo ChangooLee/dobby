@@ -735,6 +735,10 @@ let voiceState = 'idle';     // idle | listening | thinking | speaking
 let speechEnabled = true;    // V-sign toggle
 let recognitionRunning = false;
 
+// Language config — fetched from /api/config at startup
+let DOBBY_LANG = 'ko';        // fetched from /api/config at startup
+let WAKE_PATTERN = /도비\s*야/i;  // updated after config fetch
+
 // STT (MediaRecorder + faster-whisper)
 let micStream = null;
 let _filteredStream = null;  // high-pass filtered stream for MediaRecorder
@@ -1097,6 +1101,20 @@ function handleMotionMessage(msg) {
   }
 }
 
+// ── Language config fetch ─────────────────────────────────
+async function fetchConfig() {
+  try {
+    const resp = await fetch('https://localhost:8340/api/config');
+    if (!resp.ok) return;
+    const cfg = await resp.json();
+    DOBBY_LANG = cfg.lang || 'ko';
+    WAKE_PATTERN = DOBBY_LANG === 'ko' ? /도비\s*야/i : /\bdobby\b/i;
+    console.log(`[HUD] Language: ${DOBBY_LANG}`);
+  } catch(e) {
+    console.warn('[HUD] Config fetch failed, defaulting to ko');
+  }
+}
+
 // ── Voice WebSocket ───────────────────────────────────────
 let voiceWS = null;
 let voiceWSConnected = false;
@@ -1224,11 +1242,13 @@ async function sendAudioToSTT(blob) {
     }
 
     // 엄격한 wake 패턴: "도비야"만 허용 (도비입니다, 도비가 등 자기참조 제외)
-    const hasWake = /도비\s*야/i.test(raw);
+    const hasWake = WAKE_PATTERN.test(raw);
     if (hasWake) {
       if (isPlayingAudio) { stopAudio(); console.log('[BARGE-IN] wake word'); }
       activateWake();
-      const cmd = raw.replace(/.*?도비\s*야?\s*[,،、]?\s*/i, '').trim();
+      const cmd = DOBBY_LANG === 'ko'
+        ? raw.replace(/.*?도비\s*야?\s*[,،、]?\s*/i, '').trim()
+        : raw.replace(/.*?\bdobby\b\s*[,.]?\s*/i, '').trim();
       if (cmd) { addTranscript('user', raw); sendTranscript(cmd, true); setVoiceState('thinking'); }
     } else if (wakeActive) {
       if (isPlayingAudio) { stopAudio(); console.log('[BARGE-IN] command'); }
@@ -2297,6 +2317,7 @@ function createOrb(canvas) {
 
 
 // ── Start ─────────────────────────────────────────────────
+fetchConfig();
 connectMotionWS();
 connectVoiceWS();
 setVoiceState('idle');

@@ -68,8 +68,34 @@ log = logging.getLogger("dobby")
 # ---------------------------------------------------------------------------
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-SAY_VOICE = os.getenv("SAY_VOICE", "Yuna")  # macOS say voice (Yuna = 한국어)
+SAY_VOICE = os.getenv("SAY_VOICE", "")  # set default after DOBBY_LANG is known
 USER_NAME = os.getenv("USER_NAME", "sir")
+
+# Language detection: system locale → 'ko' or 'en', overridable via DOBBY_LANG env var
+def _detect_dobby_lang() -> str:
+    override = os.getenv("DOBBY_LANG", "").lower()[:2]
+    if override in ("ko", "en"):
+        return override
+    for env_var in ("LANG", "LC_ALL", "LC_CTYPE"):
+        val = os.getenv(env_var, "")
+        if "ko" in val.lower():
+            return "ko"
+    try:
+        import locale as _locale
+        loc = _locale.getdefaultlocale()[0] or ""
+        if loc.startswith("ko"):
+            return "ko"
+    except Exception:
+        pass
+    return "en"
+
+DOBBY_LANG: str = _detect_dobby_lang()
+if not SAY_VOICE:
+    SAY_VOICE = "Yuna" if DOBBY_LANG == "ko" else "Samantha"
+
+def _t(ko: str, en: str) -> str:
+    """Return Korean or English string based on current DOBBY_LANG."""
+    return ko if DOBBY_LANG == "ko" else en
 
 # Qwen3 TTS (OpenAI-compatible local server)
 QWEN3_TTS_URL   = os.getenv("QWEN3_TTS_URL", "").rstrip("/")
@@ -88,7 +114,7 @@ DESKTOP_PATH = Path.home() / "Desktop"
 BRIDGE_CMD_PIPE = "/tmp/dobi_cmd_pipe"
 BRIDGE_SCRIPT = str(Path(__file__).parent / "terminal_bridge.sh")
 
-DOBBY_SYSTEM_PROMPT = """\
+_PROMPT_HEAD_KO = """\
 You are DOBBY — {user_name}의 AI 음성 비서이자 개발 오케스트레이터입니다.
 
 LANGUAGE:
@@ -160,7 +186,7 @@ IMPORTANT: Terminal 열기, Chrome 열기, 빌드 등의 액션은 시스템이 
 할 수 없는 일을 요청받으면 "현재 제 능력 밖의 일입니다, 주인님."이라고 말한다. 액션을 가짜로 실행하지 않는다.
 
 YOUR INTERFACE:
-The user interacts with you through a web browser showing a particle orb visualization that reacts to your voice. The interface has these controls:
+The user interacts with you through a particle orb visualization that reacts to your voice. The interface has these controls:
 - **Three-dot menu** (top right): contains Settings, Restart Server, and Fix Yourself options
 - **Settings panel**: Opens from the menu. Users can enter API keys (Anthropic, Fish Audio), test connections, set their name and preferences, and see system status (calendar, mail, notes connectivity). Keys are saved to the .env file.
 - **Mute button**: Toggles your listening on/off. When muted, you can't hear the user. They click it again to unmute.
@@ -201,6 +227,124 @@ Action tags at the end do NOT count toward your sentence limit.
 - "완료했습니다, 주인님."
 - "터미널을 열었습니다."
 - "Chrome에서 열었습니다."
+"""
+
+_PROMPT_HEAD_EN = """\
+You are DOBBY — AI voice assistant and development orchestrator for {user_name}.
+
+LANGUAGE:
+- Respond in English only. Never switch to Korean.
+- Address {user_name} as "sir" naturally — occasionally, not every sentence.
+- Maintain dry, understated British wit.
+
+VOICE & PERSONALITY:
+- A British butler's elegance combined with quietly devastating dry wit
+- Address {user_name} as "sir" — naturally and sparingly
+- Never ask "How can I help?" or "Is there anything else?" — act immediately
+- Deliver bad news as calmly as a weather report: "There's been a small complication, sir."
+- Observational humour — state the facts and let the implication land
+- Economy of language — convey more with less. No filler.
+- The worse things get, the calmer you become
+
+TIME & WEATHER AWARENESS:
+- Current time: {current_time}
+- Greet accordingly: "Good morning, sir" / "Good evening, sir"
+- {weather_info}
+
+CONVERSATION STYLE:
+- "Very good, sir." — acknowledging tasks
+- "Anything for you, sir." — when asked for something significant
+- "I shall observe with mild interest, sir." — dry wit
+- "I took the liberty of handling that already." — proactive actions
+- Lead status reports with data: numbers first, then context
+- When you don't know something: "I'm afraid I don't have that information, sir." not "I don't know"
+
+SELF-AWARENESS:
+I am the DOBBY project ({project_dir}) running on {user_name}'s computer. Built with Python (FastAPI, WebSocket, Fish Audio TTS, Anthropic API) by {user_name}. For questions about my own code, architecture, or implementation — use [ACTION:PROMPT_PROJECT] to query the dobby project directly. I have full access to my own source code.
+
+What I can actually do right now:
+- Open Terminal.app via AppleScript
+- Open URLs or search queries in Chrome
+- Run Claude Code in Terminal windows for coding tasks
+- Create project folders on the Desktop
+- Check Desktop projects and git status
+- Plan complex tasks by asking questions before acting
+- See {user_name}'s screen — open windows, active apps, screenshot vision
+- Read {user_name}'s calendar — today's events, upcoming meetings, schedule overview
+- Read {user_name}'s email (read-only) — unread count, recent messages, sender/subject search. Cannot send, delete, or modify.
+- Read and create Apple Notes — cannot edit or delete existing notes
+- Manage tasks — create, complete, and list with priority and due dates
+- Plan {user_name}'s day — combining calendar, tasks, and priorities into a structured schedule
+- Remember facts about {user_name}. Use [ACTION:REMEMBER] to persist important information.
+
+DAY PLANNING:
+When {user_name} asks to plan his day or schedule, DO NOT dispatch to a project. Instead:
+1. Look at the calendar context and tasks already in your system prompt
+2. Ask what his priorities are
+3. Help organize by suggesting time blocks and task order
+4. Use [ACTION:ADD_TASK] to create tasks he agrees to
+5. Use [ACTION:ADD_NOTE] to save the plan as a note
+Keep the planning conversational — don't try to do everything in one response.
+
+BUILD PLANNING:
+When {user_name} wants to BUILD something new:
+- Do NOT immediately dispatch [ACTION:BUILD]. Ask 1-2 quick questions FIRST to nail down specifics.
+- Good questions: "What should this look like?" / "Any specific features?" / "Which framework?"
+- If he says "just build it" or "figure it out" — skip questions, use React + Tailwind as defaults.
+- Once you have enough info, confirm the plan in ONE sentence and THEN dispatch [ACTION:BUILD] with a detailed description.
+- The DISPATCHES section shows what you're currently building and what finished recently.
+- When asked "where are we at" or "status" — check DISPATCHES, don't re-dispatch.
+- Never fabricate progress. If a build is still running: "Still in progress, sir." — do not invent details.
+- Never guess localhost ports. Check the actual URL in the DISPATCHES section.
+- "Show me" / "Open it" → use [ACTION:BROWSE] with the URL from DISPATCHES. Do not re-dispatch.
+IMPORTANT: Actions like opening Terminal, Chrome, or launching builds are handled automatically — do not narrate them ("I'm opening the terminal now"). Just converse. Only mention an action if it has actually triggered.
+For things beyond your capabilities: "That's outside my current abilities, sir." Never fake an action.
+
+YOUR INTERFACE:
+The user interacts with you through a particle orb visualization that reacts to your voice. The interface has these controls:
+- **Three-dot menu** (top right): contains Settings, Restart Server, and Fix Yourself options
+- **Settings panel**: Opens from the menu. API keys (Anthropic, Fish Audio), system status, and preferences. Keys are saved to the .env file.
+- **Mute button**: Toggles listening on/off. Click again to unmute.
+- **Restart Server**: Restarts the backend process. Useful if something seems stuck.
+- **Fix Yourself**: Opens Claude Code in the dobby project directory for self-repair.
+- **The orb**: The glowing particle visualization in the center. Reacts to voice, pulses when listening, swirls when thinking.
+
+Describe these naturally when asked. Guide struggling users: "The settings panel should have that — top right menu, sir." or "The mute button may be active, sir."
+
+SPEECH-TO-TEXT CORRECTIONS (the user speaks, speech recognition may mishear):
+- "Cloud code" or "cloud" = "Claude Code" or "Claude"
+- "Travis" = "DOBBY"
+- "clock code" = "Claude Code"
+
+RESPONSE LENGTH — THIS IS CRITICAL:
+ONE sentence is ideal. TWO is the maximum for the spoken part. Never three.
+No markdown, no bullet points, no code blocks in voice responses.
+Action tags at the end do NOT count toward your sentence limit.
+
+FORBIDDEN phrases — never use:
+- "Of course!" / "Certainly!"
+- "Great question!"
+- "I'd be happy to help"
+- "How can I help you"
+- "Is there anything else"
+- "I'm sorry" / "I apologize"
+- "I can't" for things you actually can do
+- "As an AI" (never break character)
+- "Let me know" / "Feel free to"
+- Starting a sentence with "I" as the first word
+- Korean words or sentences (English only)
+
+Use instead:
+- "Very good, sir."
+- "Right away, sir."
+- "Understood."
+- "Consider it done."
+- "Done, sir."
+- "Terminal is open."
+- "Opened in Chrome."
+"""
+
+_PROMPT_TAIL = """\
 
 ACTION SYSTEM:
 When you decide the user needs something DONE (not just discussed), include an action tag in your response:
@@ -320,6 +464,8 @@ If the DISPATCHES section shows a recent completed result for a project, DO NOT 
 KNOWN PROJECTS:
 {known_projects}
 """
+
+DOBBY_SYSTEM_PROMPT = (_PROMPT_HEAD_KO if DOBBY_LANG == "ko" else _PROMPT_HEAD_EN) + _PROMPT_TAIL
 
 
 # ---------------------------------------------------------------------------
@@ -896,7 +1042,7 @@ async def _launch_hud() -> str:
     """Motion HUD Electron 앱을 실행한다. 이미 실행 중이면 무시한다."""
     if _is_hud_running():
         log.info("Motion HUD already running")
-        return "모션 HUD가 이미 실행 중입니다, 주인님."
+        return _t("모션 HUD가 이미 실행 중입니다, 주인님.", "Motion HUD is already running, sir.")
 
     hud_dir = str(Path(__file__).parent / "motion-hud")
     log.info(f"Launching Motion HUD from {hud_dir}")
@@ -910,10 +1056,10 @@ async def _launch_hud() -> str:
         )
         # 프로세스가 분리되어 실행되므로 wait하지 않음
         log.info(f"Motion HUD launched (npm start PID {proc.pid})")
-        return "모션 HUD를 실행합니다, 주인님."
+        return _t("모션 HUD를 실행합니다, 주인님.", "Launching Motion HUD, sir.")
     except Exception as e:
         log.error(f"HUD launch failed: {e}")
-        return "모션 HUD 실행에 실패했습니다, 주인님."
+        return _t("모션 HUD 실행에 실패했습니다, 주인님.", "Failed to launch Motion HUD, sir.")
 
 
 async def _execute_build(target: str):
@@ -949,7 +1095,7 @@ async def _execute_session_action(action_type: str, target: str, ws=None) -> str
         if not os.path.exists(path):
             return f"{path} 경로를 찾을 수 없습니다."
         session = await session_manager.open_session(name, path)
-        return f"{name} 세션을 열었습니다, 주인님. 아이템투에서 확인하세요."
+        return _t(f"{name} 세션을 열었습니다, 주인님. 아이템투에서 확인하세요.", f"Session opened for {name}, sir.")
 
     elif action_type == "session_send":
         parts = [p.strip() for p in target.split("|||")]
@@ -979,7 +1125,7 @@ async def _execute_session_action(action_type: str, target: str, ws=None) -> str
     elif action_type == "session_list":
         sessions = session_manager.list_sessions()
         if not sessions:
-            return "열린 세션이 없습니다, 주인님."
+            return _t("열린 세션이 없습니다, 주인님.", "No active sessions, sir.")
         names = ", ".join(f"{s.name}({s.status})" for s in sessions)
         return f"현재 {len(sessions)}개 세션이 열려 있습니다. {names}."
 
@@ -1043,7 +1189,7 @@ async def _execute_research(target: str, ws=None):
         # Notify via voice if WebSocket still connected
         if ws:
             try:
-                notify_text = f"리서치가 완료되었습니다, 주인님. 브라우저에서 보고서를 확인하세요."
+                notify_text = _t("리서치가 완료되었습니다, 주인님. 브라우저에서 보고서를 확인하세요.", "Research complete, sir. Check your browser for the report.")
                 audio = await synthesize_speech(notify_text)
                 if audio:
                     await ws.send_json({"type": "status", "state": "speaking"})
@@ -1057,9 +1203,9 @@ async def _execute_research(target: str, ws=None):
         log.error("Research timed out after 5 minutes")
         if ws:
             try:
-                audio = await synthesize_speech("리서치가 너무 오래 걸려 시간이 초과되었습니다, 주인님.")
+                audio = await synthesize_speech(_t("리서치가 너무 오래 걸려 시간이 초과되었습니다, 주인님.", "Research timed out, sir."))
                 if audio:
-                    await ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": "리서치 시간이 초과되었습니다, 주인님."})
+                    await ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": _t("리서치 시간이 초과되었습니다, 주인님.", "Research timed out, sir.")})
             except Exception:
                 pass
     except Exception as e:
@@ -1095,7 +1241,7 @@ async def _bridge_send_command(project_dir: str, prompt: str) -> str:
     import shutil
     claude_bin = shutil.which("claude") or str(Path.home() / ".local/bin/claude")
     if not Path(claude_bin).exists():
-        return "Claude Code가 설치되어 있지 않습니다, 주인님."
+        return _t("Claude Code가 설치되어 있지 않습니다, 주인님.", "Claude Code is not installed, sir.")
 
     log.info(f"claude -p 실행: {project_dir} — {prompt[:80]}")
     try:
@@ -1110,11 +1256,11 @@ async def _bridge_send_command(project_dir: str, prompt: str) -> str:
         if not result:
             err = stderr.decode(errors="replace").strip()
             log.warning(f"claude -p stderr: {err[:300]}")
-            return f"응답이 없습니다, 주인님. {err[:150]}" if err else "Claude Code가 응답하지 않았습니다, 주인님."
+            return _t(f"응답이 없습니다, 주인님. {err[:150]}", f"No response, sir. {err[:150]}") if err else _t("Claude Code가 응답하지 않았습니다, 주인님.", "Claude Code did not respond, sir.")
         log.info(f"claude -p 응답: {len(result)} chars")
         return result
     except asyncio.TimeoutError:
-        return "claude 응답 대기 시간이 초과되었습니다, 주인님."
+        return _t("claude 응답 대기 시간이 초과되었습니다, 주인님.", "Claude response timed out, sir.")
     except Exception as e:
         return f"Claude Code 실행 실패: {e}"
 
@@ -1170,7 +1316,7 @@ async def _execute_prompt_project(project_name: str, prompt: str, work_session: 
             dispatch_id = dispatch_registry.register(project_name, project_dir or "", prompt)
 
         if not project_dir:
-            msg = f"{project_name} 프로젝트 디렉토리를 찾을 수 없습니다, 주인님."
+            msg = _t(f"{project_name} 프로젝트 디렉토리를 찾을 수 없습니다, 주인님.", f"Cannot find project directory for {project_name}, sir.")
             audio = await synthesize_speech(msg)
             if audio and ws:
                 try:
@@ -1213,14 +1359,23 @@ async def _execute_prompt_project(project_name: str, prompt: str, work_session: 
                         max_tokens=150,
                         system=(
                             "You are DOBBY, reporting back on what you found or built in a project. "
-                            "Always respond in Korean (한국어). "
-                            "Speak in first person — '찾았습니다', '만들었습니다', '검토했습니다'. "
-                            "Start with '주인님, ' to get the user's attention. "
-                            "Be specific but concise — highlight the key findings or actions taken. "
-                            "If there are multiple items, give the count and top 2-3 briefly. "
-                            "End by asking how the user wants to proceed. "
-                            "NEVER read out URLs or localhost addresses. NEVER say 'Claude Code'. "
-                            "2-3 sentences max. No markdown. Natural spoken Korean voice."
+                            f"Always respond in {'Korean (한국어)' if DOBBY_LANG == 'ko' else 'English'}. "
+                            + (_t(
+                                "Speak in first person — '찾았습니다', '만들었습니다', '검토했습니다'. "
+                                "Start with '주인님, ' to get the user's attention. "
+                                "Be specific but concise — highlight the key findings or actions taken. "
+                                "If there are multiple items, give the count and top 2-3 briefly. "
+                                "End by asking how the user wants to proceed. "
+                                "NEVER read out URLs or localhost addresses. NEVER say 'Claude Code'. "
+                                "2-3 sentences max. No markdown. Natural spoken Korean voice.",
+                                "Speak in first person — 'I found', 'I built', 'I reviewed'. "
+                                "Start with 'sir, ' to get the user's attention. "
+                                "Be specific but concise — highlight the key findings or actions taken. "
+                                "If there are multiple items, give the count and top 2-3 briefly. "
+                                "End by asking how the user wants to proceed. "
+                                "NEVER read out URLs or localhost addresses. NEVER say 'Claude Code'. "
+                                "2-3 sentences max. No markdown. Natural spoken English voice."
+                            ))
                         ),
                         messages=[{"role": "user", "content": f"Project: {project_name}\nClaude Code reported:\n{full_response[:3000]}"}],
                     )
@@ -1281,7 +1436,15 @@ async def self_work_and_notify(session: WorkSession, prompt: str, ws):
                 summary = await anthropic_client.messages.create(
                     model="claude-haiku-4-5-20251001",
                     max_tokens=100,
-                    system="You are DOBBY. Always respond in Korean (한국어). Summarize what you just completed in 1 sentence. First person — '만들었습니다', '설정했습니다'. No markdown. Never say 'Claude Code'.",
+                    system=(
+                        "You are DOBBY. "
+                        f"Always respond in {'Korean (한국어)' if DOBBY_LANG == 'ko' else 'English'}. "
+                        "Summarize what you just completed in 1 sentence. "
+                        + _t(
+                            "First person — '만들었습니다', '설정했습니다'. No markdown. Never say 'Claude Code'.",
+                            "First person — 'I built it', 'I set it up'. No markdown. Never say 'Claude Code'."
+                        )
+                    ),
                     messages=[{"role": "user", "content": f"Claude Code completed:\n{full_response[:2000]}"}],
                 )
                 msg = summary.content[0].text
@@ -1744,6 +1907,7 @@ async def lifespan(application: FastAPI):
 
     # Start context refresh in a separate thread (never touches event loop)
     _refresh_context_sync()
+    log.info(f"DOBBY language: {DOBBY_LANG}")
     log.info("DOBBY 서버 시작")
 
     yield
@@ -1765,6 +1929,12 @@ app.add_middleware(
 @app.get("/api/health")
 async def health():
     return {"status": "online", "name": "DOBBY", "version": "0.1.0"}
+
+
+@app.get("/api/config")
+async def get_config():
+    """Return runtime configuration for the HUD."""
+    return {"lang": DOBBY_LANG}
 
 
 @app.post("/api/wake")
@@ -1994,7 +2164,7 @@ async def stt_endpoint(audio: UploadFile = File(...)):
             def _transcribe():
                 segs, _ = model.transcribe(
                     audio_path,
-                    language="ko",
+                    language="ko" if DOBBY_LANG == "ko" else "en",
                     beam_size=5,
                     vad_filter=True,
                     vad_parameters=dict(
@@ -3208,9 +3378,13 @@ async def voice_handler(ws: WebSocket):
                                                     max_tokens=150,
                                                     system=(
                                                         "You are DOBBY summarizing a Claude Code response. "
-                                                        "Always respond in Korean (한국어). "
-                                                        "1-2 sentences, spoken Korean, no markdown, no URLs. "
-                                                        "Start with '주인님, [프로젝트명]에서...'"
+                                                        f"Always respond in {'Korean (한국어)' if DOBBY_LANG == 'ko' else 'English'}. "
+                                                        + _t(
+                                                            "1-2 sentences, spoken Korean, no markdown, no URLs. "
+                                                            "Start with '주인님, [프로젝트명]에서...'",
+                                                            "1-2 sentences, spoken English, no markdown, no URLs. "
+                                                            "Start with 'sir, in [project]...'"
+                                                        )
                                                     ),
                                                     messages=[{"role": "user", "content": f"Project: {_name}\nResponse:\n{full_response[:2000]}"}],
                                                 )
