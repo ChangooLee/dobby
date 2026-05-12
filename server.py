@@ -1937,36 +1937,74 @@ def _get_whisper():
     global _whisper_model
     if _whisper_model is None:
         from faster_whisper import WhisperModel
-        _whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
-        log.info("Whisper base model loaded")
+        _whisper_model = WhisperModel("large-v3-turbo", device="cpu", compute_type="int8")
+        log.info("Whisper large-v3-turbo model loaded")
     return _whisper_model
+
+
+def _denoise_audio(webm_path: str) -> str:
+    """Convert webm → 16kHz mono WAV and apply stationary noise reduction.
+
+    Returns path to cleaned WAV. Falls back to original path on any error.
+    """
+    import subprocess
+    wav_path = webm_path.replace(".webm", "_clean.wav")
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", webm_path,
+             "-ar", "16000", "-ac", "1", "-f", "wav", wav_path],
+            capture_output=True, timeout=10,
+        )
+        if result.returncode != 0:
+            return webm_path
+
+        import soundfile as sf
+        import noisereduce as nr
+        audio, sr = sf.read(wav_path)
+        if audio.size == 0:
+            return webm_path
+        reduced = nr.reduce_noise(y=audio, sr=sr, stationary=True, prop_decrease=0.75)
+        sf.write(wav_path, reduced, sr)
+        return wav_path
+    except Exception as e:
+        log.debug(f"denoise skipped: {e}")
+        Path(wav_path).unlink(missing_ok=True)
+        return webm_path
 
 
 @app.post("/api/stt")
 async def stt_endpoint(audio: UploadFile = File(...)):
+    wav_path = None
     try:
         data = await audio.read()
         with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
             tmp.write(data)
             tmp_path = tmp.name
         try:
-            model = _get_whisper()
             loop = asyncio.get_event_loop()
+            # Denoise in thread (ffmpeg + numpy, blocking)
+            audio_path = await loop.run_in_executor(
+                _get_whisper_executor(), _denoise_audio, tmp_path
+            )
+            if audio_path != tmp_path:
+                wav_path = audio_path
+
+            model = _get_whisper()
 
             def _transcribe():
                 segs, _ = model.transcribe(
-                    tmp_path,
+                    audio_path,
                     language="ko",
                     beam_size=5,
                     vad_filter=True,
                     vad_parameters=dict(
-                        threshold=0.3,              # 기본 0.5 → 짧은 발화 감지
-                        min_speech_duration_ms=100, # 기본 250ms → "도비야" 수준 허용
-                        speech_pad_ms=300,          # 발화 앞뒤 패딩
+                        threshold=0.3,
+                        min_speech_duration_ms=100,
+                        speech_pad_ms=300,
                     ),
                     no_speech_threshold=0.6,
                 )
-                return list(segs)  # generator를 thread 안에서 소비
+                return list(segs)
 
             segments = await loop.run_in_executor(_get_whisper_executor(), _transcribe)
             _HALLUCINATIONS = {"구독과 좋아요", "시청해 주셔서 감사합니다", "구독", "좋아요", "MBC", "KBS", "SBS",
@@ -1977,6 +2015,8 @@ async def stt_endpoint(audio: UploadFile = File(...)):
                 text = ""
         finally:
             Path(tmp_path).unlink(missing_ok=True)
+            if wav_path:
+                Path(wav_path).unlink(missing_ok=True)
         return {"text": text}
     except Exception as e:
         log.warning(f"STT error: {e}")

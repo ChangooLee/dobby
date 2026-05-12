@@ -737,6 +737,7 @@ let recognitionRunning = false;
 
 // STT (MediaRecorder + faster-whisper)
 let micStream = null;
+let _filteredStream = null;  // high-pass filtered stream for MediaRecorder
 let vadRecorder = null;
 let _chunkBusy = false;
 const STT_CHUNK_MS = 4000;
@@ -1155,6 +1156,17 @@ async function initRecognition() {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       video: false,
     });
+    // High-pass filter at 80Hz — removes low-frequency rumble (AC, keyboard vibration)
+    if (audioCtx) {
+      const src = audioCtx.createMediaStreamSource(micStream);
+      const hp  = audioCtx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 80;
+      const dst = audioCtx.createMediaStreamDestination();
+      src.connect(hp);
+      hp.connect(dst);
+      _filteredStream = dst.stream;
+    }
   } catch (e) {
     console.warn('[HUD] Mic 접근 거부:', e);
     speechEnabled = false;
@@ -1173,7 +1185,7 @@ function _runChunk() {
   if (!isPlayingAudio) setVoiceState('listening');
   let rec;
   try {
-    rec = new MediaRecorder(micStream, { mimeType: 'audio/webm;codecs=opus' });
+    rec = new MediaRecorder(_filteredStream || micStream, { mimeType: 'audio/webm;codecs=opus' });
   } catch {
     _chunkBusy = false;
     setTimeout(_runChunk, 1000);
