@@ -53,11 +53,12 @@ Terminal.app (per-project desktop)
 ## Features
 
 ### Voice Interface
-- **Wake word** — say "도비야" to activate (5-second listen window, auto-extends after responses)
+- **Wake word** — say "도비야" to activate (10-second listen window, auto-extends after responses)
 - **Natural language commands** — any Korean phrase after the wake word
 - **Barge-in** — interrupt Dobby mid-speech with a new command
 - **TTS response** — spoken replies via Qwen3 (local) → Fish Audio → macOS `say` fallback
 - **Type Mode** — gesture-activated voice-to-text that types directly into the focused app
+- **STT** — 4-second chunks via faster-whisper with Silero VAD (filters silence/noise before transcription)
 
 ### Hand Gesture Control (Right Hand)
 | Gesture | Action |
@@ -206,16 +207,59 @@ tail -f /tmp/qwen3_tts.log      # TTS server
 
 The LLM embeds action tags in responses to trigger system behaviors:
 
+### Claude Code
 | Tag | Behavior |
 |-----|----------|
-| `[ACTION:OPEN_CLAUDE]` | Switch to project Space + launch `claude -c` |
-| `[ACTION:TYPE_TO_CLAUDE]` | Type prompt into active Claude Code session |
-| `[ACTION:BUILD]` | Create new project + open Claude Code |
-| `[ACTION:BROWSE]` | Open URL or search in Chrome |
-| `[ACTION:RESEARCH]` | Deep research via Claude Opus |
+| `[ACTION:OPEN_CLAUDE] name \| mode` | Open Claude Code session in iTerm2 (`new` / `here`) |
+| `[ACTION:TYPE_TO_CLAUDE] name \|\|\| msg` | Type prompt into active Claude Code session |
+| `[ACTION:PROMPT_PROJECT] name \|\|\| prompt` | Run Claude Code headlessly; voice the result |
+| `[ACTION:OPEN_TERMINAL]` | Open a fresh Claude Code terminal |
 | `[ACTION:SETUP_DESKTOPS]` | Visit all Spaces, open Claude Code in each |
-| `[ACTION:REMEMBER]` | Persist fact to long-term memory |
-| `[ACTION:ADD_TASK]` | Add task to tracker |
+
+### Session Management
+| Tag | Behavior |
+|-----|----------|
+| `[ACTION:SESSION_OPEN]` | Open a named Claude Code session |
+| `[ACTION:SESSION_SEND]` | Send a prompt to a specific session |
+| `[ACTION:SESSION_BROADCAST]` | Broadcast a prompt to all sessions |
+| `[ACTION:SESSION_AGGREGATE]` | Aggregate output from all sessions |
+| `[ACTION:SESSION_LIST]` | List active sessions |
+| `[ACTION:SESSION_CLOSE]` | Close a session |
+
+### Desktop & HUD
+| Tag | Behavior |
+|-----|----------|
+| `[ACTION:DESKTOP_GOTO] target` | Jump to Space number or project name |
+| `[ACTION:HUD_SHOW]` | Show Motion HUD window |
+| `[ACTION:HUD_HIDE]` | Hide Motion HUD window |
+| `[ACTION:LAUNCH_HUD]` | Launch Motion HUD (no-op if already running) |
+
+### Motion Control
+| Tag | Behavior |
+|-----|----------|
+| `[ACTION:MOTION_ENABLE]` | Enable gesture control (camera on) |
+| `[ACTION:MOTION_DISABLE]` | Disable gesture control |
+| `[ACTION:MOTION_PAUSE]` | Pause gesture recognition (camera stays on) |
+| `[ACTION:MOTION_RESUME]` | Resume after pause |
+| `[ACTION:MOTION_CALIBRATE]` | Recalibrate mouse pointer mapping |
+
+### Browsing & Research
+| Tag | Behavior |
+|-----|----------|
+| `[ACTION:BUILD] description` | Create new project + open Claude Code |
+| `[ACTION:BROWSE] url or query` | Open URL or search in Chrome |
+| `[ACTION:RESEARCH] brief` | Deep research via Claude Opus |
+| `[ACTION:SCREEN]` | Capture and describe what's on screen |
+
+### Memory & Notes
+| Tag | Behavior |
+|-----|----------|
+| `[ACTION:REMEMBER] content` | Persist fact to long-term memory |
+| `[ACTION:ADD_TASK] priority \|\|\| title \|\|\| desc \|\|\| date` | Add task to tracker |
+| `[ACTION:COMPLETE_TASK] task_id` | Mark task as done |
+| `[ACTION:ADD_NOTE] topic \|\|\| content` | Save note to memory store |
+| `[ACTION:CREATE_NOTE] title \|\|\| body` | Create Apple Note |
+| `[ACTION:READ_NOTE] title search` | Read Apple Note by title keyword |
 
 ---
 

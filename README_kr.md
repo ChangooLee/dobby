@@ -208,16 +208,59 @@ tail -f /tmp/qwen3_tts.log      # TTS 서버
 
 LLM 응답에 삽입되어 시스템 동작을 트리거합니다:
 
+### Claude Code
 | 태그 | 동작 |
 |------|------|
-| `[ACTION:OPEN_CLAUDE]` | 프로젝트 Space 전환 + `claude -c` 실행 |
-| `[ACTION:TYPE_TO_CLAUDE]` | 활성 Claude Code 세션에 프롬프트 직접 입력 |
-| `[ACTION:BUILD]` | 새 프로젝트 생성 + Claude Code 열기 |
-| `[ACTION:BROWSE]` | Chrome에서 URL/검색 열기 |
-| `[ACTION:RESEARCH]` | Claude Opus 심층 리서치 |
+| `[ACTION:OPEN_CLAUDE] name \| mode` | iTerm2에서 Claude Code 세션 열기 (`new` / `here`) |
+| `[ACTION:TYPE_TO_CLAUDE] name \|\|\| msg` | 활성 Claude Code 세션에 프롬프트 직접 입력 |
+| `[ACTION:PROMPT_PROJECT] name \|\|\| prompt` | Claude Code 헤드리스 실행 후 결과 음성 보고 |
+| `[ACTION:OPEN_TERMINAL]` | 새 Claude Code 터미널 열기 |
 | `[ACTION:SETUP_DESKTOPS]` | 모든 Space 순회, 각 프로젝트에 Claude Code 열기 |
-| `[ACTION:REMEMBER]` | 장기 메모리에 사실 저장 |
-| `[ACTION:ADD_TASK]` | 태스크 추가 |
+
+### 세션 관리
+| 태그 | 동작 |
+|------|------|
+| `[ACTION:SESSION_OPEN]` | 이름 있는 Claude Code 세션 열기 |
+| `[ACTION:SESSION_SEND]` | 특정 세션에 프롬프트 전송 |
+| `[ACTION:SESSION_BROADCAST]` | 모든 세션에 프롬프트 브로드캐스트 |
+| `[ACTION:SESSION_AGGREGATE]` | 모든 세션 출력 취합 |
+| `[ACTION:SESSION_LIST]` | 활성 세션 목록 조회 |
+| `[ACTION:SESSION_CLOSE]` | 세션 닫기 |
+
+### 데스크톱 & HUD
+| 태그 | 동작 |
+|------|------|
+| `[ACTION:DESKTOP_GOTO] target` | Space 번호 또는 프로젝트명으로 이동 |
+| `[ACTION:HUD_SHOW]` | Motion HUD 창 보이기 |
+| `[ACTION:HUD_HIDE]` | Motion HUD 창 숨기기 |
+| `[ACTION:LAUNCH_HUD]` | Motion HUD 실행 (이미 실행 중이면 무시) |
+
+### 모션 제어
+| 태그 | 동작 |
+|------|------|
+| `[ACTION:MOTION_ENABLE]` | 제스처 제어 켜기 (카메라 활성화) |
+| `[ACTION:MOTION_DISABLE]` | 제스처 제어 끄기 |
+| `[ACTION:MOTION_PAUSE]` | 제스처 인식 일시정지 (카메라 유지) |
+| `[ACTION:MOTION_RESUME]` | 일시정지 해제 |
+| `[ACTION:MOTION_CALIBRATE]` | 마우스 포인터 보정 |
+
+### 브라우징 & 리서치
+| 태그 | 동작 |
+|------|------|
+| `[ACTION:BUILD] description` | 새 프로젝트 생성 + Claude Code 열기 |
+| `[ACTION:BROWSE] url or query` | Chrome에서 URL/검색 열기 |
+| `[ACTION:RESEARCH] brief` | Claude Opus 심층 리서치 |
+| `[ACTION:SCREEN]` | 현재 화면 캡처 후 설명 |
+
+### 메모리 & 노트
+| 태그 | 동작 |
+|------|------|
+| `[ACTION:REMEMBER] content` | 장기 메모리에 사실 저장 |
+| `[ACTION:ADD_TASK] priority \|\|\| title \|\|\| desc \|\|\| date` | 태스크 추가 |
+| `[ACTION:COMPLETE_TASK] task_id` | 태스크 완료 처리 |
+| `[ACTION:ADD_NOTE] topic \|\|\| content` | 메모리 스토어에 노트 저장 |
+| `[ACTION:CREATE_NOTE] title \|\|\| body` | Apple Note 생성 |
+| `[ACTION:READ_NOTE] title search` | 제목 키워드로 Apple Note 읽기 |
 
 ---
 
