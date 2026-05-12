@@ -42,3 +42,4 @@ desktop-overlay/node_modules/
 context/
 *.db-shm
 *.db-wal
+motion-hud/release/
