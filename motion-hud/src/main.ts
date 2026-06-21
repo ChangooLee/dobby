@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain, screen, session } from "electron";
 import * as path from "path";
 import * as fs from "fs";
+import * as os from "os";
+import { spawn, ChildProcess } from "child_process";
 
 // macOS에서 dock 아이콘 숨기기
 if (process.platform === "darwin") {
@@ -45,6 +47,65 @@ function saveSettings(s: HudSettings) {
 
 let mainWindow: BrowserWindow | null = null;
 let currentSettings: HudSettings;
+let backendProcess: ChildProcess | null = null;
+
+// ── Backend launcher ──────────────────────────────────────────────────────────
+
+function findProjectDir(): string | null {
+  const candidates = [
+    process.env.DOBBY_PROJECT_DIR,
+    path.join(os.homedir(), "Workspace", "dobby"),
+    path.join(os.homedir(), "workspace", "dobby"),
+    path.join(os.homedir(), "dobby"),
+  ];
+  for (const dir of candidates) {
+    if (dir && fs.existsSync(path.join(dir, "server.py"))) return dir;
+  }
+  return null;
+}
+
+function isPortInUse(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const net = require("net");
+    const srv = net.createServer();
+    srv.once("error", () => resolve(true));
+    srv.once("listening", () => { srv.close(); resolve(false); });
+    srv.listen(port, "127.0.0.1");
+  });
+}
+
+async function startBackend() {
+  if (await isPortInUse(8340)) {
+    console.log("[DOBBY] Backend already running on :8340 — skipping spawn");
+    return;
+  }
+
+  const projectDir = findProjectDir();
+  if (!projectDir) {
+    console.error("[DOBBY] Could not find dobby project directory. Set DOBBY_PROJECT_DIR env var.");
+    return;
+  }
+
+  const pythonPath = path.join(projectDir, ".venv", "bin", "python");
+  if (!fs.existsSync(pythonPath)) {
+    console.error("[DOBBY] Python venv not found at", pythonPath);
+    return;
+  }
+
+  console.log("[DOBBY] Starting backend from", projectDir);
+  backendProcess = spawn(pythonPath, ["server.py"], {
+    cwd: projectDir,
+    stdio: "pipe",
+    env: { ...process.env },
+  });
+
+  backendProcess.stdout?.on("data", (d) => process.stdout.write("[backend] " + d));
+  backendProcess.stderr?.on("data", (d) => process.stderr.write("[backend] " + d));
+  backendProcess.on("exit", (code) => {
+    console.log("[DOBBY] Backend exited with code", code);
+    backendProcess = null;
+  });
+}
 
 function createHudWindow() {
   currentSettings = loadSettings();
@@ -145,6 +206,7 @@ app.on("certificate-error", (event, _webContents, url, _error, _cert, callback) 
 
 // app ready 이후에 createHudWindow 호출 — screen 모듈 사용 가능
 app.whenReady().then(async () => {
+  await startBackend();
   // session-level: fetch/WebSocket/XHR 등 모든 TLS 연결에 적용
   session.defaultSession.setCertificateVerifyProc((_req, callback) => {
     callback(0); // 0 = net::OK (모든 인증서 허용)
@@ -170,6 +232,14 @@ app.whenReady().then(async () => {
   }
 
   createHudWindow();
+});
+
+app.on("before-quit", () => {
+  if (backendProcess) {
+    console.log("[DOBBY] Stopping backend...");
+    backendProcess.kill("SIGTERM");
+    backendProcess = null;
+  }
 });
 
 app.on("window-all-closed", () => {
